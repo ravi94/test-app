@@ -29,11 +29,11 @@ class MonthlyBillingViewModel(
         }
     }
 
-    fun setElectricityBill(totalAmount: String) {
+    fun setElectricityRate(ratePerUnit: String) {
         val monthId = _state.value.monthId ?: return
-        execute("Electricity bill saved") {
-            billingService.setElectricityBill(monthId, totalAmount.toBigDecimal())
-            _state.update { it.copy(electricityBillInput = totalAmount) }
+        execute("Per-unit rate saved") {
+            billingService.setElectricityRate(monthId, ratePerUnit.toBigDecimal())
+            _state.update { it.copy(electricityRateInput = ratePerUnit) }
         }
     }
 
@@ -83,7 +83,7 @@ class MonthlyBillingViewModel(
 
 data class MonthlyBillingUiState(
     val monthId: String? = "2026-02",
-    val electricityBillInput: String = "",
+    val electricityRateInput: String = "",
     val flatUnitsInput: Map<String, String> = emptyMap(),
     val computedCharges: List<TenantMonthlyCharge> = emptyList(),
     val isFinalized: Boolean = false,

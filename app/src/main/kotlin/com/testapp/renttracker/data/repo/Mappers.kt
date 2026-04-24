@@ -28,10 +28,10 @@ internal fun Tenant.toEntity(): TenantEntity =
     TenantEntity(id = id, name = name, flatId = flatId, phone = phone, isActive = isActive, notes = notes)
 
 internal fun BillingMonthEntity.toDomain(): BillingMonth =
-    BillingMonth(id = id, electricityTotalAmount = electricityTotalAmount, status = status)
+    BillingMonth(id = id, electricityRatePerUnit = electricityRatePerUnit, status = status)
 
 internal fun BillingMonth.toEntity(): BillingMonthEntity =
-    BillingMonthEntity(id = id, electricityTotalAmount = electricityTotalAmount, status = status)
+    BillingMonthEntity(id = id, electricityRatePerUnit = electricityRatePerUnit, status = status)
 
 internal fun FlatUsageEntity.toDomain(): FlatUsage =
     FlatUsage(flatId = flatId, billingMonthId = billingMonthId, unitsConsumed = unitsConsumed)

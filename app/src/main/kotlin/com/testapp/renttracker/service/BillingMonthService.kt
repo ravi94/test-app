@@ -25,16 +25,16 @@ class BillingMonthService(
         monthRepo.createMonth(
             BillingMonth(
                 id = monthId,
-                electricityTotalAmount = zero,
+                electricityRatePerUnit = zero,
                 status = BillingMonthStatus.Draft,
             )
         )
     }
 
-    fun setElectricityBill(monthId: String, totalAmount: BigDecimal) {
-        requireNonNegative(totalAmount, "totalAmount")
+    fun setElectricityRate(monthId: String, ratePerUnit: BigDecimal) {
+        requireNonNegative(ratePerUnit, "ratePerUnit")
         val month = requireMonth(monthId)
-        monthRepo.updateMonth(month.copy(electricityTotalAmount = totalAmount.setScale(2, RoundingMode.HALF_UP)))
+        monthRepo.updateMonth(month.copy(electricityRatePerUnit = ratePerUnit.setScale(2, RoundingMode.HALF_UP)))
     }
 
     fun upsertFlatUsage(monthId: String, flatId: String, units: BigDecimal) {
@@ -54,10 +54,10 @@ class BillingMonthService(
         val activeTenants = tenantRepo.getActiveTenants()
 
         val usage = usageRepo.getUsageByMonth(monthId)
-        val electricityByFlat = BillingCalculator.computeElectricityShareByFlat(
+        val electricityByFlat = BillingCalculator.computeElectricityChargeByFlat(
             flats = activeFlats,
             usages = usage,
-            totalBill = month.electricityTotalAmount,
+            ratePerUnit = month.electricityRatePerUnit,
         )
 
         val charges = activeTenants.map { tenant ->

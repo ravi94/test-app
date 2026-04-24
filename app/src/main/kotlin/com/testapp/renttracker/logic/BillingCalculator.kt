@@ -10,47 +10,24 @@ import java.math.RoundingMode
 object BillingCalculator {
     private val ZERO = BigDecimal.ZERO
 
-    fun computeElectricityShareByFlat(
+    fun computeElectricityChargeByFlat(
         flats: List<Flat>,
         usages: List<FlatUsage>,
-        totalBill: BigDecimal,
+        ratePerUnit: BigDecimal,
     ): Map<String, BigDecimal> {
         val usageByFlat = usages.associateBy { it.flatId }
-        val flatUnits = flats.map { flat ->
-            flat.id to (usageByFlat[flat.id]?.unitsConsumed ?: ZERO)
-        }
-
-        val totalUnits = flatUnits.fold(ZERO) { acc, (_, u) -> acc.add(u) }
-        if (totalUnits.compareTo(ZERO) == 0) {
+        if (ratePerUnit < ZERO) {
             throw ValidationError(
-                code = ErrorCodes.ZERO_TOTAL_UNITS,
-                message = "Cannot compute electricity split when total units are zero",
-                field = "unitsConsumed",
+                code = ErrorCodes.INVALID_AMOUNT,
+                message = "ratePerUnit must be non-negative",
+                field = "ratePerUnit",
             )
         }
 
-        val roundedShares = mutableListOf<Pair<String, BigDecimal>>()
-        var runningTotal = ZERO
-
-        flatUnits.forEachIndexed { idx, (flatId, units) ->
-            val share = if (idx == flatUnits.lastIndex) {
-                totalBill.subtract(runningTotal)
-            } else {
-                totalBill
-                    .multiply(units)
-                    .divide(totalUnits, 2, RoundingMode.HALF_UP)
-            }
-            val normalized = share.setScale(2, RoundingMode.HALF_UP)
-            roundedShares += flatId to normalized
-            runningTotal = runningTotal.add(normalized)
+        return flats.associate { flat ->
+            val units = usageByFlat[flat.id]?.unitsConsumed ?: ZERO
+            val charge = units.multiply(ratePerUnit).setScale(2, RoundingMode.HALF_UP)
+            flat.id to charge
         }
-
-        val delta = totalBill.setScale(2, RoundingMode.HALF_UP).subtract(runningTotal)
-        if (delta.compareTo(ZERO) != 0 && roundedShares.isNotEmpty()) {
-            val last = roundedShares.last()
-            roundedShares[roundedShares.lastIndex] = last.first to last.second.add(delta)
-        }
-
-        return roundedShares.toMap()
     }
 }

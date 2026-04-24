@@ -22,7 +22,7 @@ data class Tenant(
 
 data class BillingMonth(
     val id: String,
-    val electricityTotalAmount: BigDecimal,
+    val electricityRatePerUnit: BigDecimal,
     val status: BillingMonthStatus,
 )
 

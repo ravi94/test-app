@@ -9,7 +9,7 @@ import java.math.BigDecimal
 
 class BillingCalculatorTest {
     @Test
-    fun `electricity split reconciles to exact bill after rounding`() {
+    fun `electricity charge is computed from per-unit rate`() {
         val flats = listOf(
             Flat("F1", "A-101", BigDecimal("5000.00")),
             Flat("F2", "A-102", BigDecimal("6000.00")),
@@ -21,9 +21,10 @@ class BillingCalculatorTest {
             FlatUsage("F3", "2026-02", BigDecimal("29")),
         )
 
-        val shares = BillingCalculator.computeElectricityShareByFlat(flats, usages, BigDecimal("1000.00"))
-        val total = shares.values.reduce(BigDecimal::add)
+        val shares = BillingCalculator.computeElectricityChargeByFlat(flats, usages, BigDecimal("12.50"))
 
-        assertEquals(BigDecimal("1000.00"), total)
+        assertEquals(BigDecimal("387.50"), shares.getValue("F1"))
+        assertEquals(BigDecimal("212.50"), shares.getValue("F2"))
+        assertEquals(BigDecimal("362.50"), shares.getValue("F3"))
     }
 }

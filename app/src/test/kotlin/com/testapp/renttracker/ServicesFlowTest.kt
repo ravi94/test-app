@@ -65,7 +65,7 @@ class ServicesFlowTest {
         val dashboard = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)
 
         billingService.createBillingMonth("2026-02")
-        billingService.setElectricityBill("2026-02", BigDecimal("1200.00"))
+        billingService.setElectricityRate("2026-02", BigDecimal("12.00"))
         billingService.upsertFlatUsage("2026-02", "F1", BigDecimal("40"))
         billingService.upsertFlatUsage("2026-02", "F2", BigDecimal("60"))
         billingService.computeMonthCharges("2026-02")

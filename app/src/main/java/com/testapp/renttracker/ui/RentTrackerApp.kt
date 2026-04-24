@@ -5,11 +5,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -55,7 +58,11 @@ fun RentTrackerApp(
 ) {
     var selectedTab by remember { mutableStateOf(RootTab.Billing) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
         TabRow(selectedTabIndex = selectedTab.ordinal) {
             RootTab.entries.forEach { tab ->
                 Tab(
@@ -80,7 +87,7 @@ private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     var monthId by remember { mutableStateOf("2026-02") }
-    var billAmount by remember { mutableStateOf("1200.00") }
+    var electricityRate by remember { mutableStateOf("12.00") }
     var f1Units by remember { mutableStateOf("40") }
     var f2Units by remember { mutableStateOf("60") }
 
@@ -104,15 +111,15 @@ private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
         )
 
         OutlinedTextField(
-            value = billAmount,
-            onValueChange = { billAmount = it },
-            label = { Text("Electricity Bill") },
+            value = electricityRate,
+            onValueChange = { electricityRate = it },
+            label = { Text("Electricity Rate Per Unit") },
             modifier = Modifier.fillMaxWidth(),
         )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { viewModel.createMonth() }) { Text("Create Month") }
-            Button(onClick = { viewModel.setElectricityBill(billAmount) }) { Text("Save Bill") }
+            Button(onClick = { viewModel.setElectricityRate(electricityRate) }) { Text("Save Rate") }
         }
 
         OutlinedTextField(
