@@ -1,7 +1,9 @@
 package com.testapp.renttracker.service
 
 import com.testapp.renttracker.model.MonthSummary
+import com.testapp.renttracker.model.TenantDashboardRow
 import com.testapp.renttracker.repo.PaymentRecordRepository
+import com.testapp.renttracker.repo.TenantRepository
 import com.testapp.renttracker.repo.TenantMonthlyChargeRepository
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -9,6 +11,7 @@ import java.math.RoundingMode
 class DashboardQueryService(
     private val chargeRepo: TenantMonthlyChargeRepository,
     private val paymentRepo: PaymentRecordRepository,
+    private val tenantRepo: TenantRepository,
 ) {
     fun getMonthSummary(monthId: String): MonthSummary {
         val charges = chargeRepo.getChargesByMonth(monthId)
@@ -38,5 +41,29 @@ class DashboardQueryService(
             totalTenantCount = paidAndUnpaid.size,
             unpaidTenantIds = unpaidTenantIds,
         )
+    }
+
+    fun getTenantDetails(monthId: String): List<TenantDashboardRow> {
+        val charges = chargeRepo.getChargesByMonth(monthId)
+        val payments = paymentRepo.getPaymentsByMonth(monthId)
+        val tenantsById = tenantRepo.getActiveTenants().associateBy { it.id }
+
+        return charges.map { charge ->
+            val totalPaid = payments
+                .filter { it.tenantId == charge.tenantId }
+                .fold(BigDecimal.ZERO) { acc, payment -> acc.add(payment.amountPaid) }
+                .setScale(2, RoundingMode.HALF_UP)
+            val dueAmount = charge.totalDue.subtract(totalPaid).setScale(2, RoundingMode.HALF_UP)
+            val tenant = tenantsById[charge.tenantId]
+
+            TenantDashboardRow(
+                tenantId = charge.tenantId,
+                tenantName = tenant?.name ?: charge.tenantId,
+                rentAmount = charge.rentAmount.setScale(2, RoundingMode.HALF_UP),
+                electricityShare = charge.electricityShare.setScale(2, RoundingMode.HALF_UP),
+                totalPaid = totalPaid,
+                dueAmount = dueAmount,
+            )
+        }.sortedBy { it.tenantName }
     }
 }

@@ -62,7 +62,7 @@ class ServicesFlowTest {
 
         val billingService = BillingMonthService(flatRepo, tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
         val paymentService = PaymentService(paymentRepo, chargeRepo, balanceRepo, SequenceIdGenerator())
-        val dashboard = DashboardQueryService(chargeRepo, paymentRepo)
+        val dashboard = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)
 
         billingService.createBillingMonth("2026-02")
         billingService.setElectricityBill("2026-02", BigDecimal("1200.00"))
@@ -100,5 +100,11 @@ class ServicesFlowTest {
         assertEquals(BigDecimal("12200.00"), summary.totalExpected)
         assertEquals(BigDecimal("12600.00"), summary.totalPaid)
         assertEquals(BigDecimal("-400.00"), summary.totalPending)
+
+        val tenantDetails = dashboard.getTenantDetails("2026-02").associateBy { it.tenantId }
+        assertEquals(BigDecimal("5000.00"), tenantDetails.getValue("T1").rentAmount)
+        assertEquals(BigDecimal("480.00"), tenantDetails.getValue("T1").electricityShare)
+        assertEquals(BigDecimal("6200.00"), tenantDetails.getValue("T1").totalPaid)
+        assertEquals(BigDecimal("-720.00"), tenantDetails.getValue("T1").dueAmount)
     }
 }

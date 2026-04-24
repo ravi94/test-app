@@ -27,7 +27,7 @@ class PaymentViewModel(
 
     fun recordPayment() {
         val draft = _state.value.draft
-        execute {
+        execute("Payment recorded") {
             paymentService.recordPayment(
                 RecordPaymentInput(
                     tenantId = draft.tenantId,
@@ -42,22 +42,22 @@ class PaymentViewModel(
     }
 
     fun recomputeBalance(monthId: String) {
-        execute {
+        execute("Balance recomputed") {
             val balances = paymentService.recomputeTenantBalance(monthId)
             _state.update { it.copy(latestBalances = balances) }
         }
     }
 
-    private fun execute(block: () -> Unit) {
-        _state.update { it.copy(isLoading = true, error = null) }
+    private fun execute(successMessage: String, block: () -> Unit) {
+        _state.update { it.copy(isLoading = true, error = null, message = null) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 block.invoke()
-                _state.update { it.copy(isLoading = false) }
+                _state.update { it.copy(isLoading = false, message = successMessage) }
             } catch (e: ValidationError) {
-                _state.update { it.copy(isLoading = false, error = "${e.code}: ${e.message}") }
+                _state.update { it.copy(isLoading = false, error = "${e.code}: ${e.message}", message = null) }
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = e.message ?: "Unknown error") }
+                _state.update { it.copy(isLoading = false, error = e.message ?: "Unknown error", message = null) }
             }
         }
     }
@@ -76,5 +76,6 @@ data class PaymentUiState(
     val draft: PaymentDraft = PaymentDraft(),
     val latestBalances: List<TenantBalance> = emptyList(),
     val isLoading: Boolean = false,
+    val message: String? = null,
     val error: String? = null,
 )

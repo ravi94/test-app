@@ -49,6 +49,7 @@ class AppGraph(
     private val dashboardQueryService = DashboardQueryService(
         chargeRepo = chargeRepo,
         paymentRepo = paymentRepo,
+        tenantRepo = tenantRepo,
     )
 
     fun billingViewModelFactory() = SimpleViewModelFactory {

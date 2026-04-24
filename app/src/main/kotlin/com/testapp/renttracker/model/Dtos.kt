@@ -22,6 +22,15 @@ data class MonthSummary(
     val unpaidTenantIds: List<String>,
 )
 
+data class TenantDashboardRow(
+    val tenantId: String,
+    val tenantName: String,
+    val rentAmount: BigDecimal,
+    val electricityShare: BigDecimal,
+    val totalPaid: BigDecimal,
+    val dueAmount: BigDecimal,
+)
+
 data class TenantPaymentState(
     val tenantId: String,
     val due: BigDecimal,
