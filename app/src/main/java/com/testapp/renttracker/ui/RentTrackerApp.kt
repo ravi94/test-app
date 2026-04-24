@@ -1,6 +1,7 @@
 package com.testapp.renttracker.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,17 +19,14 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,8 +36,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.testapp.renttracker.model.OverallTenantDashboardRow
 import com.testapp.renttracker.model.PaymentComponent
-import com.testapp.renttracker.model.TenantDashboardRow
+import com.testapp.renttracker.model.TenantHistoryScreenData
+import com.testapp.renttracker.model.TenantMonthlyAmountRow
+import com.testapp.renttracker.model.TenantPaymentHistoryRow
 import com.testapp.renttracker.presentation.billing.MonthlyBillingViewModel
 import com.testapp.renttracker.presentation.dashboard.DashboardViewModel
 import com.testapp.renttracker.presentation.payment.PaymentDraft
@@ -245,8 +246,7 @@ private fun PaymentScreen(viewModel: PaymentViewModel) {
 @Composable
 private fun DashboardScreen(viewModel: DashboardViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var monthId by remember { mutableStateOf("2026-02") }
-    var showTenantDetailsDialog by remember { mutableStateOf(false) }
+    val tenantHistory = state.selectedTenantHistory
 
     Column(
         modifier = Modifier
@@ -257,20 +257,10 @@ private fun DashboardScreen(viewModel: DashboardViewModel) {
     ) {
         Text("Dashboard", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-        OutlinedTextField(
-            value = monthId,
-            onValueChange = { monthId = it },
-            label = { Text("Month") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(onClick = { viewModel.refresh(monthId) }) { Text("Get Summary") }
-        Button(
-            onClick = {
-                showTenantDetailsDialog = true
-                viewModel.loadTenantDetails(monthId)
-            }
-        ) {
-            Text("Get Tenant Details")
+        if (tenantHistory == null) {
+            Button(onClick = { viewModel.refresh() }) { Text("Refresh Overall Summary") }
+        } else {
+            Button(onClick = { viewModel.closeTenantHistory() }) { Text("Back To Summary") }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -282,64 +272,154 @@ private fun DashboardScreen(viewModel: DashboardViewModel) {
             Text(state.message ?: "", color = MaterialTheme.colorScheme.primary)
         }
 
-        val summary = state.summary
-        if (summary != null) {
-            Text("Expected: ${summary.totalExpected}")
-            Text("Paid: ${summary.totalPaid}")
-            Text("Pending: ${summary.totalPending}")
-            Text("Paid Tenants: ${summary.paidTenantCount}/${summary.totalTenantCount}")
-            Text("Unpaid IDs: ${summary.unpaidTenantIds.joinToString()}")
+        if (tenantHistory != null) {
+            TenantHistoryScreen(tenantHistory)
+        } else {
+            val summary = state.summary
+            if (summary != null) {
+                Text("Total Billed: ${summary.totalBilled}")
+                Text("Paid: ${summary.totalPaid}")
+                Text("Balance: ${summary.totalBalance}")
+                Text("Paid Tenants: ${summary.paidTenantCount}/${summary.totalTenantCount}")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Overall Summary Per Tenant", fontWeight = FontWeight.Bold)
+                OverallTenantDetailsTable(
+                    rows = summary.tenantRows,
+                    onTenantClick = viewModel::openTenantHistory,
+                )
+            }
         }
 
         if (state.error != null) {
             Text(state.error ?: "", color = MaterialTheme.colorScheme.error)
         }
     }
-
-    if (showTenantDetailsDialog) {
-        TenantDetailsDialog(
-            monthId = monthId,
-            state = state,
-            onClose = { showTenantDetailsDialog = false },
-        )
-    }
 }
 
 @Composable
-private fun TenantDetailsTable(rows: List<TenantDashboardRow>) {
+private fun OverallTenantDetailsTable(
+    rows: List<OverallTenantDashboardRow>,
+    onTenantClick: (String) -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        TenantDetailsRow(
+        OverallTenantDetailsRow(
             tenant = "Tenant",
-            rent = "Rent",
-            electricity = "Electricity",
+            billed = "Billed",
             paid = "Paid",
-            due = "Due",
+            balance = "Balance",
+            status = "Status",
             isHeader = true,
         )
         rows.forEach { row ->
-            TenantDetailsRow(
+            OverallTenantDetailsRow(
                 tenant = row.tenantName,
-                rent = row.rentAmount.money(),
-                electricity = row.electricityShare.money(),
+                billed = row.totalBilled.money(),
                 paid = row.totalPaid.money(),
-                due = row.dueAmount.money(),
+                balance = row.balance.money(),
+                status = row.status.name,
+                onClick = { onTenantClick(row.tenantId) },
             )
         }
     }
 }
 
 @Composable
-private fun TenantDetailsRow(
+private fun OverallTenantDetailsRow(
     tenant: String,
-    rent: String,
-    electricity: String,
+    billed: String,
     paid: String,
-    due: String,
+    balance: String,
+    status: String,
+    isHeader: Boolean = false,
+    onClick: (() -> Unit)? = null,
+) {
+    val fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal
+    val rowColor = if (isHeader) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+
+    Surface(
+        color = rowColor,
+        shape = RoundedCornerShape(8.dp),
+        border = if (isHeader) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable(enabled = onClick != null) { onClick?.invoke() }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(tenant, modifier = Modifier.width(130.dp), fontWeight = fontWeight)
+            Text(billed, modifier = Modifier.width(100.dp), fontWeight = fontWeight)
+            Text(paid, modifier = Modifier.width(90.dp), fontWeight = fontWeight)
+            Text(balance, modifier = Modifier.width(100.dp), fontWeight = fontWeight)
+            Text(status, modifier = Modifier.width(90.dp), fontWeight = fontWeight)
+        }
+    }
+}
+
+@Composable
+private fun TenantHistoryScreen(history: TenantHistoryScreenData) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(history.tenantName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        Text("Payments", fontWeight = FontWeight.Bold)
+        PaymentHistoryTable(history.payments)
+
+        Text("Electricity", fontWeight = FontWeight.Bold)
+        MonthlyAmountTable(rows = history.electricityCharges, amountHeader = "Electricity")
+
+        Text("Rent", fontWeight = FontWeight.Bold)
+        MonthlyAmountTable(rows = history.rentCharges, amountHeader = "Rent")
+
+        Text("Total Payment Made: ${history.totalPayments.money()}", fontWeight = FontWeight.Bold)
+        Text("Total Due: ${history.totalDue.money()}", fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun PaymentHistoryTable(rows: List<TenantPaymentHistoryRow>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        PaymentHistoryRow(
+            month = "Month",
+            paidOn = "Paid On",
+            component = "Component",
+            amount = "Amount",
+            isHeader = true,
+        )
+        if (rows.isEmpty()) {
+            Text("No payments recorded.")
+        } else {
+            rows.forEach { row ->
+                PaymentHistoryRow(
+                    month = row.billingMonthId,
+                    paidOn = row.paidOn.toString(),
+                    component = row.component.name,
+                    amount = row.amountPaid.money(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentHistoryRow(
+    month: String,
+    paidOn: String,
+    component: String,
+    amount: String,
     isHeader: Boolean = false,
 ) {
     val fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal
@@ -358,58 +438,69 @@ private fun TenantDetailsRow(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(tenant, modifier = Modifier.width(130.dp), fontWeight = fontWeight)
-            Text(rent, modifier = Modifier.width(90.dp), fontWeight = fontWeight)
-            Text(electricity, modifier = Modifier.width(110.dp), fontWeight = fontWeight)
-            Text(paid, modifier = Modifier.width(90.dp), fontWeight = fontWeight)
-            Text(due, modifier = Modifier.width(90.dp), fontWeight = fontWeight)
+            Text(month, modifier = Modifier.width(90.dp), fontWeight = fontWeight)
+            Text(paidOn, modifier = Modifier.width(110.dp), fontWeight = fontWeight)
+            Text(component, modifier = Modifier.width(110.dp), fontWeight = fontWeight)
+            Text(amount, modifier = Modifier.width(90.dp), fontWeight = fontWeight)
         }
     }
 }
 
 @Composable
-private fun TenantDetailsDialog(
-    monthId: String,
-    state: com.testapp.renttracker.presentation.dashboard.DashboardUiState,
-    onClose: () -> Unit,
+private fun MonthlyAmountTable(
+    rows: List<TenantMonthlyAmountRow>,
+    amountHeader: String,
 ) {
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Tenant Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(monthId, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        MonthlyAmountRow(
+            month = "Month",
+            amount = amountHeader,
+            isHeader = true,
+        )
+        if (rows.isEmpty()) {
+            Text("No charges found.")
+        } else {
+            rows.forEach { row ->
+                MonthlyAmountRow(
+                    month = row.billingMonthId,
+                    amount = row.amount.money(),
+                )
             }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (state.isLoading) {
-                    Text("Loading tenant details...")
-                }
-                state.error?.let { error ->
-                    Text(error, color = MaterialTheme.colorScheme.error)
-                }
-                if (!state.isLoading && state.error == null && state.tenantDetails.isEmpty()) {
-                    Text("No tenant details found for this month.")
-                }
-                if (state.tenantDetails.isNotEmpty()) {
-                    HorizontalDivider()
-                    TenantDetailsTable(state.tenantDetails)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onClose) {
-                Text("Close")
-            }
-        },
-    )
+        }
+    }
+}
+
+@Composable
+private fun MonthlyAmountRow(
+    month: String,
+    amount: String,
+    isHeader: Boolean = false,
+) {
+    val fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal
+    val rowColor = if (isHeader) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+
+    Surface(
+        color = rowColor,
+        shape = RoundedCornerShape(8.dp),
+        border = if (isHeader) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(month, modifier = Modifier.width(110.dp), fontWeight = fontWeight)
+            Text(amount, modifier = Modifier.width(110.dp), fontWeight = fontWeight)
+        }
+    }
 }
 
 private fun BigDecimal.money(): String = setScale(2, RoundingMode.HALF_UP).toPlainString()

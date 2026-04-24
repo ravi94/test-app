@@ -16,4 +16,7 @@ interface PaymentRecordDao {
 
     @Query("SELECT * FROM payment_records WHERE tenant_id = :tenantId AND billing_month_id = :monthId")
     suspend fun getByTenantAndMonth(tenantId: String, monthId: String): List<PaymentRecordEntity>
+
+    @Query("SELECT * FROM payment_records")
+    suspend fun getAll(): List<PaymentRecordEntity>
 }

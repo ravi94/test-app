@@ -27,12 +27,14 @@ interface FlatUsageRepository {
 interface TenantMonthlyChargeRepository {
     fun replaceMonthCharges(monthId: String, charges: List<TenantMonthlyCharge>)
     fun getChargesByMonth(monthId: String): List<TenantMonthlyCharge>
+    fun getAllCharges(): List<TenantMonthlyCharge>
 }
 
 interface PaymentRecordRepository {
     fun insertPayment(payment: PaymentRecord)
     fun getPaymentsByMonth(monthId: String): List<PaymentRecord>
     fun getPaymentsByTenantAndMonth(tenantId: String, monthId: String): List<PaymentRecord>
+    fun getAllPayments(): List<PaymentRecord>
 }
 
 interface TenantBalanceRepository {

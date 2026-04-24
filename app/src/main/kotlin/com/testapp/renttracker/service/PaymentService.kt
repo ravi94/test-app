@@ -42,6 +42,7 @@ class PaymentService(
             note = input.note,
         )
         paymentRepo.insertPayment(payment)
+        recomputeTenantBalanceIfPossible(input.billingMonthId)
         return payment
     }
 
@@ -76,10 +77,16 @@ class PaymentService(
             val pending = charge.totalDue.subtract(paid).setScale(2, RoundingMode.HALF_UP)
             val status = when {
                 pending <= BigDecimal.ZERO -> PaymentStatus.Paid
-                paid == BigDecimal.ZERO -> PaymentStatus.Unpaid
+                paid.compareTo(BigDecimal.ZERO) == 0 -> PaymentStatus.Unpaid
                 else -> PaymentStatus.Partial
             }
             TenantPaymentState(charge.tenantId, charge.totalDue, paid, pending, status)
+        }
+    }
+
+    private fun recomputeTenantBalanceIfPossible(monthId: String) {
+        if (chargeRepo.getChargesByMonth(monthId).isNotEmpty()) {
+            recomputeTenantBalance(monthId)
         }
     }
 }

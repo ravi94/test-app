@@ -1,7 +1,11 @@
 package com.testapp.renttracker.service
 
-import com.testapp.renttracker.model.MonthSummary
-import com.testapp.renttracker.model.TenantDashboardRow
+import com.testapp.renttracker.model.OverallDashboardSummary
+import com.testapp.renttracker.model.OverallTenantDashboardRow
+import com.testapp.renttracker.model.PaymentStatus
+import com.testapp.renttracker.model.TenantHistoryScreenData
+import com.testapp.renttracker.model.TenantMonthlyAmountRow
+import com.testapp.renttracker.model.TenantPaymentHistoryRow
 import com.testapp.renttracker.repo.PaymentRecordRepository
 import com.testapp.renttracker.repo.TenantRepository
 import com.testapp.renttracker.repo.TenantMonthlyChargeRepository
@@ -13,57 +17,109 @@ class DashboardQueryService(
     private val paymentRepo: PaymentRecordRepository,
     private val tenantRepo: TenantRepository,
 ) {
-    fun getMonthSummary(monthId: String): MonthSummary {
-        val charges = chargeRepo.getChargesByMonth(monthId)
-        val payments = paymentRepo.getPaymentsByMonth(monthId)
+    fun getOverallSummary(): OverallDashboardSummary {
+        val charges = chargeRepo.getAllCharges()
+        val payments = paymentRepo.getAllPayments()
+        val tenantsById = tenantRepo.getActiveTenants().associateBy { it.id }
 
-        val totalExpected = charges.fold(BigDecimal.ZERO) { acc, c -> acc.add(c.totalDue) }.setScale(2, RoundingMode.HALF_UP)
-        val totalPaid = payments.fold(BigDecimal.ZERO) { acc, p -> acc.add(p.amountPaid) }.setScale(2, RoundingMode.HALF_UP)
-        val totalPending = totalExpected.subtract(totalPaid).setScale(2, RoundingMode.HALF_UP)
-
-        val paidAndUnpaid = charges.associate { charge ->
-            val paidForTenant = payments
-                .filter { it.tenantId == charge.tenantId }
-                .fold(BigDecimal.ZERO) { acc, p -> acc.add(p.amountPaid) }
-                .setScale(2, RoundingMode.HALF_UP)
-            charge.tenantId to charge.totalDue.subtract(paidForTenant)
+        val billedByTenant = charges.groupBy { it.tenantId }.mapValues { (_, tenantCharges) ->
+            tenantCharges.fold(BigDecimal.ZERO) { acc, charge ->
+                acc.add(charge.rentAmount).add(charge.electricityShare)
+            }.scaled()
+        }
+        val paidByTenant = payments.groupBy { it.tenantId }.mapValues { (_, tenantPayments) ->
+            tenantPayments.fold(BigDecimal.ZERO) { acc, payment -> acc.add(payment.amountPaid) }.scaled()
         }
 
-        val unpaidTenantIds = paidAndUnpaid.filterValues { it > BigDecimal.ZERO }.keys.toList()
-        val paidTenantCount = paidAndUnpaid.size - unpaidTenantIds.size
+        val tenantIds = (billedByTenant.keys + paidByTenant.keys).toSortedSet()
+        val tenantRows = tenantIds.map { tenantId ->
+            val totalBilled = billedByTenant[tenantId] ?: zero()
+            val totalPaid = paidByTenant[tenantId] ?: zero()
+            val balance = totalBilled.subtract(totalPaid).scaled()
+            val status = when {
+                balance <= BigDecimal.ZERO -> PaymentStatus.Paid
+                totalPaid.compareTo(BigDecimal.ZERO) == 0 -> PaymentStatus.Unpaid
+                else -> PaymentStatus.Partial
+            }
 
-        return MonthSummary(
-            monthId = monthId,
-            totalExpected = totalExpected,
+            OverallTenantDashboardRow(
+                tenantId = tenantId,
+                tenantName = tenantsById[tenantId]?.name ?: tenantId,
+                totalBilled = totalBilled,
+                totalPaid = totalPaid,
+                balance = balance,
+                status = status,
+            )
+        }.sortedBy { it.tenantName }
+
+        val totalBilled = tenantRows.fold(BigDecimal.ZERO) { acc, row -> acc.add(row.totalBilled) }.scaled()
+        val totalPaid = tenantRows.fold(BigDecimal.ZERO) { acc, row -> acc.add(row.totalPaid) }.scaled()
+        val totalBalance = tenantRows.fold(BigDecimal.ZERO) { acc, row -> acc.add(row.balance) }.scaled()
+        val paidTenantCount = tenantRows.count { it.status == PaymentStatus.Paid }
+
+        return OverallDashboardSummary(
+            totalBilled = totalBilled,
             totalPaid = totalPaid,
-            totalPending = totalPending,
+            totalBalance = totalBalance,
             paidTenantCount = paidTenantCount,
-            totalTenantCount = paidAndUnpaid.size,
-            unpaidTenantIds = unpaidTenantIds,
+            totalTenantCount = tenantRows.size,
+            tenantRows = tenantRows,
         )
     }
 
-    fun getTenantDetails(monthId: String): List<TenantDashboardRow> {
-        val charges = chargeRepo.getChargesByMonth(monthId)
-        val payments = paymentRepo.getPaymentsByMonth(monthId)
-        val tenantsById = tenantRepo.getActiveTenants().associateBy { it.id }
-
-        return charges.map { charge ->
-            val totalPaid = payments
-                .filter { it.tenantId == charge.tenantId }
-                .fold(BigDecimal.ZERO) { acc, payment -> acc.add(payment.amountPaid) }
-                .setScale(2, RoundingMode.HALF_UP)
-            val dueAmount = charge.totalDue.subtract(totalPaid).setScale(2, RoundingMode.HALF_UP)
-            val tenant = tenantsById[charge.tenantId]
-
-            TenantDashboardRow(
-                tenantId = charge.tenantId,
-                tenantName = tenant?.name ?: charge.tenantId,
-                rentAmount = charge.rentAmount.setScale(2, RoundingMode.HALF_UP),
-                electricityShare = charge.electricityShare.setScale(2, RoundingMode.HALF_UP),
-                totalPaid = totalPaid,
-                dueAmount = dueAmount,
+    fun getTenantHistory(tenantId: String): TenantHistoryScreenData {
+        val tenant = tenantRepo.getActiveTenants().firstOrNull { it.id == tenantId }
+        val charges = chargeRepo.getAllCharges()
+            .filter { it.tenantId == tenantId }
+            .sortedByDescending { it.billingMonthId }
+        val payments = paymentRepo.getAllPayments()
+            .filter { it.tenantId == tenantId }
+            .sortedWith(
+                compareByDescending<com.testapp.renttracker.model.PaymentRecord> { it.paidOn }
+                    .thenByDescending { it.id }
             )
-        }.sortedBy { it.tenantName }
+
+        val paymentRows = payments.map { payment ->
+            TenantPaymentHistoryRow(
+                tenantId = payment.tenantId,
+                billingMonthId = payment.billingMonthId,
+                paidOn = payment.paidOn,
+                amountPaid = payment.amountPaid.scaled(),
+                component = payment.component,
+                note = payment.note,
+            )
+        }
+        val electricityCharges = charges.map { charge ->
+            TenantMonthlyAmountRow(
+                tenantId = charge.tenantId,
+                billingMonthId = charge.billingMonthId,
+                amount = charge.electricityShare.scaled(),
+            )
+        }
+        val rentCharges = charges.map { charge ->
+            TenantMonthlyAmountRow(
+                tenantId = charge.tenantId,
+                billingMonthId = charge.billingMonthId,
+                amount = charge.rentAmount.scaled(),
+            )
+        }
+
+        val totalPayments = paymentRows.fold(BigDecimal.ZERO) { acc, payment -> acc.add(payment.amountPaid) }.scaled()
+        val totalRent = rentCharges.fold(BigDecimal.ZERO) { acc, charge -> acc.add(charge.amount) }.scaled()
+        val totalElectricity = electricityCharges.fold(BigDecimal.ZERO) { acc, charge -> acc.add(charge.amount) }.scaled()
+
+        return TenantHistoryScreenData(
+            tenantId = tenantId,
+            tenantName = tenant?.name ?: tenantId,
+            payments = paymentRows,
+            electricityCharges = electricityCharges,
+            rentCharges = rentCharges,
+            totalPayments = totalPayments,
+            totalDue = totalRent.add(totalElectricity).subtract(totalPayments).scaled(),
+        )
     }
+
+    private fun BigDecimal.scaled(): BigDecimal = setScale(2, RoundingMode.HALF_UP)
+
+    private fun zero(): BigDecimal = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
 }

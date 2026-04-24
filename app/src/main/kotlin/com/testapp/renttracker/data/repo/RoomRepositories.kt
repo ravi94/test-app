@@ -63,6 +63,10 @@ class RoomTenantMonthlyChargeRepository(private val dao: TenantMonthlyChargeDao)
     override fun getChargesByMonth(monthId: String): List<TenantMonthlyCharge> = runBlocking {
         dao.getByMonth(monthId).map { it.toDomain() }
     }
+
+    override fun getAllCharges(): List<TenantMonthlyCharge> = runBlocking {
+        dao.getAll().map { it.toDomain() }
+    }
 }
 
 class RoomPaymentRecordRepository(private val dao: PaymentRecordDao) : PaymentRecordRepository {
@@ -74,6 +78,10 @@ class RoomPaymentRecordRepository(private val dao: PaymentRecordDao) : PaymentRe
 
     override fun getPaymentsByTenantAndMonth(tenantId: String, monthId: String): List<PaymentRecord> = runBlocking {
         dao.getByTenantAndMonth(tenantId, monthId).map { it.toDomain() }
+    }
+
+    override fun getAllPayments(): List<PaymentRecord> = runBlocking {
+        dao.getAll().map { it.toDomain() }
     }
 }
 

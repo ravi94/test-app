@@ -43,6 +43,8 @@ class InMemoryChargeRepo : TenantMonthlyChargeRepository {
     }
 
     override fun getChargesByMonth(monthId: String): List<TenantMonthlyCharge> = byMonth[monthId].orEmpty()
+
+    override fun getAllCharges(): List<TenantMonthlyCharge> = byMonth.values.flatten()
 }
 
 class InMemoryPaymentRepo : PaymentRecordRepository {
@@ -57,6 +59,8 @@ class InMemoryPaymentRepo : PaymentRecordRepository {
     override fun getPaymentsByTenantAndMonth(tenantId: String, monthId: String): List<PaymentRecord> {
         return payments.filter { it.tenantId == tenantId && it.billingMonthId == monthId }
     }
+
+    override fun getAllPayments(): List<PaymentRecord> = payments.toList()
 }
 
 class InMemoryBalanceRepo : TenantBalanceRepository {

@@ -12,23 +12,47 @@ data class RecordPaymentInput(
     val note: String? = null,
 )
 
-data class MonthSummary(
-    val monthId: String,
-    val totalExpected: BigDecimal,
+data class OverallDashboardSummary(
+    val totalBilled: BigDecimal,
     val totalPaid: BigDecimal,
-    val totalPending: BigDecimal,
+    val totalBalance: BigDecimal,
     val paidTenantCount: Int,
     val totalTenantCount: Int,
-    val unpaidTenantIds: List<String>,
+    val tenantRows: List<OverallTenantDashboardRow>,
 )
 
-data class TenantDashboardRow(
+data class OverallTenantDashboardRow(
     val tenantId: String,
     val tenantName: String,
-    val rentAmount: BigDecimal,
-    val electricityShare: BigDecimal,
+    val totalBilled: BigDecimal,
     val totalPaid: BigDecimal,
-    val dueAmount: BigDecimal,
+    val balance: BigDecimal,
+    val status: PaymentStatus,
+)
+
+data class TenantPaymentHistoryRow(
+    val tenantId: String,
+    val billingMonthId: String,
+    val paidOn: LocalDate,
+    val amountPaid: BigDecimal,
+    val component: PaymentComponent,
+    val note: String? = null,
+)
+
+data class TenantMonthlyAmountRow(
+    val tenantId: String,
+    val billingMonthId: String,
+    val amount: BigDecimal,
+)
+
+data class TenantHistoryScreenData(
+    val tenantId: String,
+    val tenantName: String,
+    val payments: List<TenantPaymentHistoryRow>,
+    val electricityCharges: List<TenantMonthlyAmountRow>,
+    val rentCharges: List<TenantMonthlyAmountRow>,
+    val totalPayments: BigDecimal,
+    val totalDue: BigDecimal,
 )
 
 data class TenantPaymentState(
