@@ -32,6 +32,10 @@ class PaymentViewModel(
         _state.update { it.copy(draft = draft) }
     }
 
+    fun refreshTenants() {
+        _state.update { it.copy(availableTenants = tenantRepo.getActiveTenants()) }
+    }
+
     fun recordPayment() {
         val draft = _state.value.draft
         execute("Payment recorded") {

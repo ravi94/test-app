@@ -1,21 +1,18 @@
 package com.testapp.renttracker.data.repo
 
 import com.testapp.renttracker.data.room.dao.BillingMonthDao
-import com.testapp.renttracker.data.room.dao.FlatDao
 import com.testapp.renttracker.data.room.dao.FlatUsageDao
 import com.testapp.renttracker.data.room.dao.PaymentRecordDao
 import com.testapp.renttracker.data.room.dao.TenantBalanceDao
 import com.testapp.renttracker.data.room.dao.TenantDao
 import com.testapp.renttracker.data.room.dao.TenantMonthlyChargeDao
 import com.testapp.renttracker.model.BillingMonth
-import com.testapp.renttracker.model.Flat
 import com.testapp.renttracker.model.FlatUsage
 import com.testapp.renttracker.model.PaymentRecord
 import com.testapp.renttracker.model.Tenant
 import com.testapp.renttracker.model.TenantBalance
 import com.testapp.renttracker.model.TenantMonthlyCharge
 import com.testapp.renttracker.repo.BillingMonthRepository
-import com.testapp.renttracker.repo.FlatRepository
 import com.testapp.renttracker.repo.FlatUsageRepository
 import com.testapp.renttracker.repo.IdGenerator
 import com.testapp.renttracker.repo.PaymentRecordRepository
@@ -25,17 +22,21 @@ import com.testapp.renttracker.repo.TenantRepository
 import kotlinx.coroutines.runBlocking
 import java.util.UUID
 
-class RoomFlatRepository(private val dao: FlatDao) : FlatRepository {
-    override fun getActiveFlats(): List<Flat> = runBlocking { dao.getActiveFlats().map { it.toDomain() } }
-
-    override fun getFlatById(flatId: String): Flat? = runBlocking { dao.getFlatById(flatId)?.toDomain() }
-}
-
 class RoomTenantRepository(private val dao: TenantDao) : TenantRepository {
     override fun getActiveTenants(): List<Tenant> = runBlocking { dao.getActiveTenants().map { it.toDomain() } }
 
-    override fun getActiveTenantByFlat(flatId: String): Tenant? = runBlocking {
-        dao.getActiveTenantByFlat(flatId)?.toDomain()
+    override fun getAllTenants(): List<Tenant> = runBlocking { dao.getAllTenants().map { it.toDomain() } }
+
+    override fun getActiveTenantByFlatLabel(flatLabel: String): Tenant? = runBlocking {
+        dao.getActiveTenantByFlatLabel(flatLabel)?.toDomain()
+    }
+
+    override fun upsertTenant(tenant: Tenant) = runBlocking {
+        dao.upsert(tenant.toEntity())
+    }
+
+    override fun deleteTenantById(tenantId: String) = runBlocking {
+        dao.deleteById(tenantId)
     }
 }
 
@@ -67,6 +68,10 @@ class RoomTenantMonthlyChargeRepository(private val dao: TenantMonthlyChargeDao)
     override fun getAllCharges(): List<TenantMonthlyCharge> = runBlocking {
         dao.getAll().map { it.toDomain() }
     }
+
+    override fun deleteChargesByTenant(tenantId: String) = runBlocking {
+        dao.deleteByTenant(tenantId)
+    }
 }
 
 class RoomPaymentRecordRepository(private val dao: PaymentRecordDao) : PaymentRecordRepository {
@@ -83,6 +88,10 @@ class RoomPaymentRecordRepository(private val dao: PaymentRecordDao) : PaymentRe
     override fun getAllPayments(): List<PaymentRecord> = runBlocking {
         dao.getAll().map { it.toDomain() }
     }
+
+    override fun deletePaymentsByTenant(tenantId: String) = runBlocking {
+        dao.deleteByTenant(tenantId)
+    }
 }
 
 class RoomTenantBalanceRepository(private val dao: TenantBalanceDao) : TenantBalanceRepository {
@@ -94,6 +103,10 @@ class RoomTenantBalanceRepository(private val dao: TenantBalanceDao) : TenantBal
 
     override fun getAllBalancesForMonth(asOfMonthId: String): List<TenantBalance> = runBlocking {
         dao.getAllForMonth(asOfMonthId).map { it.toDomain() }
+    }
+
+    override fun deleteBalancesByTenant(tenantId: String) = runBlocking {
+        dao.deleteByTenant(tenantId)
     }
 }
 

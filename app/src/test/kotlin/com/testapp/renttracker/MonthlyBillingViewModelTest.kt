@@ -1,6 +1,5 @@
 package com.testapp.renttracker
 
-import com.testapp.renttracker.model.Flat
 import com.testapp.renttracker.model.Tenant
 import com.testapp.renttracker.presentation.billing.MonthlyBillingViewModel
 import com.testapp.renttracker.service.BillingMonthService
@@ -12,23 +11,17 @@ import kotlin.test.assertNotNull
 class MonthlyBillingViewModelTest {
     @Test
     fun `billing view model loads tenants and updates selected tenant`() {
-        val flatRepo = InMemoryFlatRepo(
-            mutableListOf(
-                Flat("F1", "A-101", BigDecimal("5000.00")),
-                Flat("F2", "A-102", BigDecimal("6000.00")),
-            )
-        )
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "F1"),
-                Tenant("T2", "Aman", "F2"),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00")),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00")),
             )
         )
         val monthRepo = InMemoryBillingMonthRepo()
         val usageRepo = InMemoryFlatUsageRepo()
         val chargeRepo = InMemoryChargeRepo()
         val balanceRepo = InMemoryBalanceRepo()
-        val service = BillingMonthService(flatRepo, tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
+        val service = BillingMonthService(tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
 
         val viewModel = MonthlyBillingViewModel(service, tenantRepo, monthRepo, usageRepo)
 
@@ -42,23 +35,17 @@ class MonthlyBillingViewModelTest {
 
     @Test
     fun `save billing entry creates month saves usage and recomputes month`() {
-        val flatRepo = InMemoryFlatRepo(
-            mutableListOf(
-                Flat("F1", "A-101", BigDecimal("5000.00")),
-                Flat("F2", "A-102", BigDecimal("6000.00")),
-            )
-        )
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "F1"),
-                Tenant("T2", "Aman", "F2"),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00")),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00")),
             )
         )
         val monthRepo = InMemoryBillingMonthRepo()
         val usageRepo = InMemoryFlatUsageRepo()
         val chargeRepo = InMemoryChargeRepo()
         val balanceRepo = InMemoryBalanceRepo()
-        val service = BillingMonthService(flatRepo, tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
+        val service = BillingMonthService(tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
 
         val viewModel = MonthlyBillingViewModel(service, tenantRepo, monthRepo, usageRepo)
         viewModel.setMonth("2026-04")
@@ -73,8 +60,8 @@ class MonthlyBillingViewModelTest {
         assertNotNull(createdMonth)
         assertEquals(BigDecimal("8.00"), createdMonth.electricityRatePerUnit)
 
-        val usage = usageRepo.getUsageByMonth("2026-04").associateBy { it.flatId }
-        assertEquals(BigDecimal("10.00"), usage.getValue("F1").unitsConsumed)
+        val usage = usageRepo.getUsageByMonth("2026-04").associateBy { it.flatLabel }
+        assertEquals(BigDecimal("10.00"), usage.getValue("A-101").unitsConsumed)
 
         val charges = chargeRepo.getChargesByMonth("2026-04").associateBy { it.tenantId }
         assertEquals(BigDecimal("5080.00"), charges.getValue("T1").totalDue)
@@ -84,8 +71,8 @@ class MonthlyBillingViewModelTest {
         viewModel.saveBillingEntry()
         waitFor { viewModel.state.value.message == "Billing updated" }
 
-        val updatedUsage = usageRepo.getUsageByMonth("2026-04").associateBy { it.flatId }
-        assertEquals(BigDecimal("12.00"), updatedUsage.getValue("F1").unitsConsumed)
+        val updatedUsage = usageRepo.getUsageByMonth("2026-04").associateBy { it.flatLabel }
+        assertEquals(BigDecimal("12.00"), updatedUsage.getValue("A-101").unitsConsumed)
     }
 
     private fun waitFor(condition: () -> Boolean) {

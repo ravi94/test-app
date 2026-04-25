@@ -21,6 +21,9 @@ interface TenantMonthlyChargeDao {
     @Query("SELECT * FROM tenant_monthly_charges")
     suspend fun getAll(): List<TenantMonthlyChargeEntity>
 
+    @Query("DELETE FROM tenant_monthly_charges WHERE tenant_id = :tenantId")
+    suspend fun deleteByTenant(tenantId: String)
+
     @Transaction
     suspend fun replaceByMonth(monthId: String, charges: List<TenantMonthlyChargeEntity>) {
         deleteByMonth(monthId)

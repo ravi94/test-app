@@ -4,14 +4,12 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.testapp.renttracker.data.room.dao.BillingMonthDao
-import com.testapp.renttracker.data.room.dao.FlatDao
 import com.testapp.renttracker.data.room.dao.FlatUsageDao
 import com.testapp.renttracker.data.room.dao.PaymentRecordDao
 import com.testapp.renttracker.data.room.dao.TenantBalanceDao
 import com.testapp.renttracker.data.room.dao.TenantDao
 import com.testapp.renttracker.data.room.dao.TenantMonthlyChargeDao
 import com.testapp.renttracker.data.room.entity.BillingMonthEntity
-import com.testapp.renttracker.data.room.entity.FlatEntity
 import com.testapp.renttracker.data.room.entity.FlatUsageEntity
 import com.testapp.renttracker.data.room.entity.PaymentRecordEntity
 import com.testapp.renttracker.data.room.entity.TenantBalanceEntity
@@ -20,7 +18,6 @@ import com.testapp.renttracker.data.room.entity.TenantMonthlyChargeEntity
 
 @Database(
     entities = [
-        FlatEntity::class,
         TenantEntity::class,
         BillingMonthEntity::class,
         FlatUsageEntity::class,
@@ -28,12 +25,11 @@ import com.testapp.renttracker.data.room.entity.TenantMonthlyChargeEntity
         TenantBalanceEntity::class,
         PaymentRecordEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
 abstract class RentTrackerDatabase : RoomDatabase() {
-    abstract fun flatDao(): FlatDao
     abstract fun tenantDao(): TenantDao
     abstract fun billingMonthDao(): BillingMonthDao
     abstract fun flatUsageDao(): FlatUsageDao

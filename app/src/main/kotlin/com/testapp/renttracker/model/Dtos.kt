@@ -12,6 +12,17 @@ data class RecordPaymentInput(
     val note: String? = null,
 )
 
+data class CreateTenantOnboardingInput(
+    val name: String,
+    val flatLabel: String,
+    val monthlyRent: BigDecimal,
+    val phone: String? = null,
+    val isActive: Boolean = true,
+    val notes: String? = null,
+    val billingStartMonth: String,
+    val initialDue: BigDecimal,
+)
+
 data class OverallDashboardSummary(
     val totalBilled: BigDecimal,
     val totalPaid: BigDecimal,
@@ -61,4 +72,12 @@ data class TenantPaymentState(
     val paid: BigDecimal,
     val pending: BigDecimal,
     val status: PaymentStatus,
+)
+
+data class TenantListItem(
+    val tenantId: String,
+    val tenantName: String,
+    val flatLabel: String,
+    val monthlyRent: BigDecimal,
+    val isActive: Boolean,
 )

@@ -51,6 +51,21 @@ class MonthlyBillingViewModel(
         refreshFormState()
     }
 
+    fun refreshTenants() {
+        val tenants = tenantRepo.getActiveTenants()
+        val selectedTenantId = _state.value.selectedTenantId.takeIf { currentId ->
+            tenants.any { it.id == currentId }
+        } ?: tenants.firstOrNull()?.id.orEmpty()
+
+        _state.update {
+            it.copy(
+                availableTenants = tenants,
+                selectedTenantId = selectedTenantId,
+            )
+        }
+        refreshFormState()
+    }
+
     fun setElectricityRateInput(ratePerUnit: String) {
         _state.update { it.copy(electricityRateInput = ratePerUnit) }
     }
@@ -67,7 +82,7 @@ class MonthlyBillingViewModel(
         execute("Billing updated") {
             ensureMonthExists(monthId)
             billingService.setElectricityRate(monthId, current.electricityRateInput.toBigDecimal())
-            billingService.upsertFlatUsage(monthId, tenant.flatId, current.selectedTenantUnitsInput.toBigDecimal())
+            billingService.upsertFlatUsage(monthId, tenant.flatLabel, current.selectedTenantUnitsInput.toBigDecimal())
             billingService.computeMonthCharges(monthId)
             refreshFormState()
         }
@@ -90,8 +105,8 @@ class MonthlyBillingViewModel(
         val monthId = current.monthId ?: return
         val tenant = current.availableTenants.firstOrNull { it.id == current.selectedTenantId }
         val month = monthRepo.getMonth(monthId)
-        val usageByFlat = usageRepo.getUsageByMonth(monthId).associateBy { it.flatId }
-        val unitsForTenant = tenant?.let { usageByFlat[it.flatId]?.unitsConsumed?.formatAmount() }.orEmpty()
+        val usageByFlat = usageRepo.getUsageByMonth(monthId).associateBy { it.flatLabel }
+        val unitsForTenant = tenant?.let { usageByFlat[it.flatLabel]?.unitsConsumed?.formatAmount() }.orEmpty()
 
         _state.update {
             it.copy(

@@ -1,6 +1,5 @@
 package com.testapp.renttracker
 
-import com.testapp.renttracker.model.Flat
 import com.testapp.renttracker.model.PaymentComponent
 import com.testapp.renttracker.model.RecordPaymentInput
 import com.testapp.renttracker.model.Tenant
@@ -8,6 +7,7 @@ import com.testapp.renttracker.presentation.dashboard.DashboardViewModel
 import com.testapp.renttracker.service.BillingMonthService
 import com.testapp.renttracker.service.DashboardQueryService
 import com.testapp.renttracker.service.PaymentService
+import com.testapp.renttracker.service.TenantManagementService
 import java.math.BigDecimal
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -38,22 +38,22 @@ class DashboardViewModelTest {
 
     @Test
     fun `open tenant history loads detail and close returns to summary`() {
-        val flatRepo = InMemoryFlatRepo(mutableListOf(Flat("F1", "A-101", BigDecimal("5000.00"))))
-        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "F1")))
+        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"))))
         val monthRepo = InMemoryBillingMonthRepo()
         val usageRepo = InMemoryFlatUsageRepo()
         val chargeRepo = InMemoryChargeRepo()
         val paymentRepo = InMemoryPaymentRepo()
         val balanceRepo = InMemoryBalanceRepo()
 
-        val billingService = BillingMonthService(flatRepo, tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
+        val billingService = BillingMonthService(tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
         val paymentService = PaymentService(paymentRepo, chargeRepo, balanceRepo, monthRepo, SequenceIdGenerator())
         val dashboardService = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)
-        val viewModel = DashboardViewModel(dashboardService)
+        val tenantManagementService = TenantManagementService(tenantRepo, chargeRepo, paymentRepo, balanceRepo)
+        val viewModel = DashboardViewModel(dashboardService, tenantManagementService)
 
         billingService.createBillingMonth("2026-02")
         billingService.setElectricityRate("2026-02", BigDecimal("8.00"))
-        billingService.upsertFlatUsage("2026-02", "F1", BigDecimal("10"))
+        billingService.upsertFlatUsage("2026-02", "A-101", BigDecimal("10"))
         billingService.computeMonthCharges("2026-02")
         paymentService.recordPayment(
             RecordPaymentInput(
@@ -85,6 +85,33 @@ class DashboardViewModelTest {
 
         assertNull(viewModel.state.value.selectedTenantHistory)
         assertEquals(1, viewModel.state.value.summary?.tenantRows?.size)
+    }
+
+    @Test
+    fun `delete tenant refreshes dashboard tenant list`() {
+        val tenantRepo = InMemoryTenantRepo(
+            mutableListOf(
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00")),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00")),
+            )
+        )
+        val chargeRepo = InMemoryChargeRepo()
+        val paymentRepo = InMemoryPaymentRepo()
+        val balanceRepo = InMemoryBalanceRepo()
+        val dashboardService = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)
+        val tenantManagementService = TenantManagementService(tenantRepo, chargeRepo, paymentRepo, balanceRepo)
+        val viewModel = DashboardViewModel(dashboardService, tenantManagementService)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+        waitFor { viewModel.state.value.allTenants.isNotEmpty() }
+        assertEquals(2, viewModel.state.value.allTenants.size)
+
+        viewModel.deleteTenant("T1")
+        advanceUntilIdle()
+        waitFor { viewModel.state.value.message == "Tenant deleted" }
+
+        assertEquals(listOf("T2"), viewModel.state.value.allTenants.map { it.tenantId })
     }
 
     private fun advanceUntilIdle() {

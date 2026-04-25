@@ -21,15 +21,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -37,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,6 +59,7 @@ import com.testapp.renttracker.model.TenantMonthlyAmountRow
 import com.testapp.renttracker.model.TenantPaymentHistoryRow
 import com.testapp.renttracker.presentation.billing.MonthlyBillingViewModel
 import com.testapp.renttracker.presentation.dashboard.DashboardViewModel
+import com.testapp.renttracker.presentation.onboarding.TenantOnboardingViewModel
 import com.testapp.renttracker.presentation.payment.PaymentDraft
 import com.testapp.renttracker.presentation.payment.PaymentViewModel
 import java.math.BigDecimal
@@ -59,36 +68,339 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-private enum class RootTab { Billing, Payment, Dashboard }
+private enum class RootTab { Home, TenantManagement, Billing, Payment }
+private enum class TenantManagementView { List, Onboarding }
+
+private fun RootTab.menuLabel(): String =
+    when (this) {
+        RootTab.Home -> "Home"
+        RootTab.TenantManagement -> "Tenant"
+        RootTab.Billing -> "Billing"
+        RootTab.Payment -> "Payment"
+    }
+
+private fun RootTab.menuIconText(): String =
+    when (this) {
+        RootTab.Home -> "HM"
+        RootTab.TenantManagement -> "TN"
+        RootTab.Billing -> "BL"
+        RootTab.Payment -> "PY"
+    }
 
 @Composable
 fun RentTrackerApp(
+    tenantOnboardingViewModel: TenantOnboardingViewModel,
     billingViewModel: MonthlyBillingViewModel,
     paymentViewModel: PaymentViewModel,
     dashboardViewModel: DashboardViewModel,
 ) {
-    var selectedTab by remember { mutableStateOf(RootTab.Billing) }
+    var selectedTab by remember { mutableStateOf(RootTab.Home) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        TabRow(selectedTabIndex = selectedTab.ordinal) {
-            RootTab.entries.forEach { tab ->
-                Tab(
-                    selected = selectedTab == tab,
-                    onClick = { selectedTab = tab },
-                    text = { Text(tab.name) },
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            when (selectedTab) {
+                RootTab.Home -> DashboardScreen(dashboardViewModel)
+                RootTab.TenantManagement -> TenantManagementScreen(
+                    onboardingViewModel = tenantOnboardingViewModel,
+                    dashboardViewModel = dashboardViewModel,
+                    onTenantCreated = {
+                        billingViewModel.refreshTenants()
+                        paymentViewModel.refreshTenants()
+                        dashboardViewModel.refresh()
+                    },
+                    onTenantDeleted = {
+                        billingViewModel.refreshTenants()
+                        paymentViewModel.refreshTenants()
+                        dashboardViewModel.refresh()
+                    },
+                )
+                RootTab.Billing -> BillingScreen(billingViewModel)
+                RootTab.Payment -> PaymentScreen(paymentViewModel)
+            }
+        }
+
+        BottomMenuBar(
+            selectedTab = selectedTab,
+            onTabSelected = { selectedTab = it },
+        )
+    }
+}
+
+@Composable
+private fun BottomMenuBar(
+    selectedTab: RootTab,
+    onTabSelected: (RootTab) -> Unit,
+) {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        RootTab.entries.forEach { tab ->
+            NavigationBarItem(
+                selected = selectedTab == tab,
+                onClick = { onTabSelected(tab) },
+                icon = { Text(tab.menuIconText(), fontWeight = FontWeight.Bold) },
+                label = { Text(tab.menuLabel()) },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TenantManagementScreen(
+    onboardingViewModel: TenantOnboardingViewModel,
+    dashboardViewModel: DashboardViewModel,
+    onTenantCreated: () -> Unit,
+    onTenantDeleted: () -> Unit,
+) {
+    var currentView by remember { mutableStateOf(TenantManagementView.List) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            shape = RoundedCornerShape(24.dp),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Tenant Management", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    if (currentView == TenantManagementView.List) "All tenants and quick actions"
+                    else "Create a new tenant",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        when (selectedTab) {
-            RootTab.Billing -> BillingScreen(billingViewModel)
-            RootTab.Payment -> PaymentScreen(paymentViewModel)
-            RootTab.Dashboard -> DashboardScreen(dashboardViewModel)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        when (currentView) {
+            TenantManagementView.Onboarding -> OnboardingForm(
+                viewModel = onboardingViewModel,
+                onTenantCreated = {
+                    onTenantCreated()
+                    currentView = TenantManagementView.List
+                },
+                onBack = { currentView = TenantManagementView.List },
+            )
+            TenantManagementView.List -> TenantManagementListScreen(
+                viewModel = dashboardViewModel,
+                onCreateTenant = { currentView = TenantManagementView.Onboarding },
+                onTenantDeleted = onTenantDeleted,
+            )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OnboardingForm(
+    viewModel: TenantOnboardingViewModel,
+    onTenantCreated: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        TextButton(onClick = onBack) {
+            Text("Back To Tenants")
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            shape = RoundedCornerShape(24.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Onboard Tenant", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                OutlinedTextField(
+                    value = state.name,
+                    onValueChange = viewModel::setName,
+                    label = { Text("Tenant Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = state.phone,
+                    onValueChange = viewModel::setPhone,
+                    label = { Text("Phone") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = state.flatLabel,
+                    onValueChange = viewModel::setFlatLabel,
+                    label = { Text("Flat Identifier") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = state.monthlyRent,
+                    onValueChange = viewModel::setMonthlyRent,
+                    label = { Text("Monthly Rent") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Active Tenant", style = MaterialTheme.typography.bodyLarge)
+                    Switch(
+                        checked = state.isActive,
+                        onCheckedChange = viewModel::setActive,
+                    )
+                }
+
+                OutlinedTextField(
+                    value = state.billingStartMonth,
+                    onValueChange = viewModel::setBillingStartMonth,
+                    label = { Text("Billing Start Month (YYYY-MM)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = state.initialDue,
+                    onValueChange = viewModel::setInitialDue,
+                    label = { Text("Initial Due") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                OutlinedTextField(
+                    value = state.notes,
+                    onValueChange = viewModel::setNotes,
+                    label = { Text("Notes") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Button(
+                    onClick = {
+                        viewModel.submit(onSuccess = onTenantCreated)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Create Tenant")
+                }
+            }
+        }
+
+        if (state.isLoading) {
+            Text("Working...")
+        }
+        if (state.message != null) {
+            Text(state.message ?: "", color = MaterialTheme.colorScheme.primary)
+        }
+        if (state.error != null) {
+            Text(state.error ?: "", color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
+private fun TenantManagementListScreen(
+    viewModel: DashboardViewModel,
+    onCreateTenant: () -> Unit,
+    onTenantDeleted: () -> Unit,
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    var tenantPendingDelete by remember { mutableStateOf<com.testapp.renttracker.model.TenantListItem?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            shape = RoundedCornerShape(24.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Tenant List", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick = { viewModel.refresh() }) {
+                            Text("↻", style = MaterialTheme.typography.titleLarge)
+                        }
+                        IconButton(onClick = onCreateTenant) {
+                            Text("+", style = MaterialTheme.typography.titleLarge)
+                        }
+                    }
+                }
+
+                if (state.isLoading) {
+                    Text("Working...")
+                }
+                if (state.message != null) {
+                    Text(state.message ?: "", color = MaterialTheme.colorScheme.primary)
+                }
+
+                TenantManagementTable(
+                    tenants = state.allTenants,
+                    onDeleteClick = { tenantPendingDelete = it },
+                )
+
+                if (state.error != null) {
+                    Text(state.error ?: "", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+
+    tenantPendingDelete?.let { tenant ->
+        AlertDialog(
+            onDismissRequest = { tenantPendingDelete = null },
+            title = { Text("Delete Tenant") },
+            text = { Text("Delete ${tenant.tenantName} and all related charges, payments, and balances?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        tenantPendingDelete = null
+                        viewModel.deleteTenant(
+                            tenant.tenantId,
+                            onSuccess = onTenantDeleted,
+                        )
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { tenantPendingDelete = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -148,7 +460,8 @@ private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
             Text(state.message ?: "", color = MaterialTheme.colorScheme.primary)
         }
         selectedTenant?.let { tenant ->
-            Text("Selected Tenant: ${tenant.name} (${tenant.id})")
+            Text("Selected Tenant: ${tenant.name}")
+            Text("Flat: ${tenant.flatLabel}")
             if (state.selectedTenantUnitsInput.isNotBlank()) {
                 Text("Saved Units For $monthId: ${state.selectedTenantUnitsInput}")
             }
@@ -249,7 +562,10 @@ private fun TenantDropdownField(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val selectedTenant = tenants.firstOrNull { it.id == selectedTenantId }
-    val displayValue = selectedTenant?.let { "${it.name} (${it.id})" } ?: selectedTenantId
+    val nameCounts = tenants.groupingBy { it.name }.eachCount()
+    fun tenantLabel(tenant: com.testapp.renttracker.model.Tenant): String =
+        if ((nameCounts[tenant.name] ?: 0) > 1) "${tenant.name} (${tenant.id})" else tenant.name
+    val displayValue = selectedTenant?.let(::tenantLabel) ?: selectedTenantId
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -272,7 +588,7 @@ private fun TenantDropdownField(
         ) {
             tenants.forEach { tenant ->
                 DropdownMenuItem(
-                    text = { Text("${tenant.name} (${tenant.id})") },
+                    text = { Text(tenantLabel(tenant)) },
                     onClick = {
                         onTenantSelected(tenant.id)
                         expanded = false
@@ -288,6 +604,12 @@ private fun DashboardScreen(viewModel: DashboardViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val tenantHistory = state.selectedTenantHistory
 
+    LaunchedEffect(state.summary, state.isLoading, tenantHistory) {
+        if (state.summary == null && !state.isLoading && tenantHistory == null) {
+            viewModel.refresh()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -295,12 +617,21 @@ private fun DashboardScreen(viewModel: DashboardViewModel) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Dashboard", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Home", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-        if (tenantHistory == null) {
-            Button(onClick = { viewModel.refresh() }) { Text("Refresh Overall Summary") }
-        } else {
-            Button(onClick = { viewModel.closeTenantHistory() }) { Text("Back To Summary") }
+            if (tenantHistory == null) {
+                IconButton(onClick = { viewModel.refresh() }) {
+                    Text("↻", style = MaterialTheme.typography.titleLarge)
+                }
+            } else {
+                TextButton(onClick = { viewModel.closeTenantHistory() }) {
+                    Text("Back")
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -332,6 +663,79 @@ private fun DashboardScreen(viewModel: DashboardViewModel) {
 
         if (state.error != null) {
             Text(state.error ?: "", color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
+private fun TenantManagementTable(
+    tenants: List<com.testapp.renttracker.model.TenantListItem>,
+    onDeleteClick: (com.testapp.renttracker.model.TenantListItem) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        TenantManagementRow(
+            tenant = "Tenant",
+            flat = "Flat",
+            rent = "Rent",
+            status = "Status",
+            action = "Action",
+            isHeader = true,
+        )
+        if (tenants.isEmpty()) {
+            Text("No tenants found.")
+        } else {
+            tenants.forEach { tenant ->
+                TenantManagementRow(
+                    tenant = tenant.tenantName,
+                    flat = tenant.flatLabel,
+                    rent = tenant.monthlyRent.money(),
+                    status = if (tenant.isActive) "Active" else "Inactive",
+                    action = "Delete",
+                    onActionClick = { onDeleteClick(tenant) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TenantManagementRow(
+    tenant: String,
+    flat: String,
+    rent: String,
+    status: String,
+    action: String,
+    isHeader: Boolean = false,
+    onActionClick: (() -> Unit)? = null,
+) {
+    val fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal
+    val rowColor = if (isHeader) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+
+    Surface(
+        color = rowColor,
+        shape = RoundedCornerShape(8.dp),
+        border = if (isHeader) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(tenant, modifier = Modifier.width(140.dp), fontWeight = fontWeight)
+            Text(flat, modifier = Modifier.width(110.dp), fontWeight = fontWeight)
+            Text(rent, modifier = Modifier.width(90.dp), fontWeight = fontWeight)
+            Text(status, modifier = Modifier.width(90.dp), fontWeight = fontWeight)
+            if (isHeader) {
+                Text(action, modifier = Modifier.width(80.dp), fontWeight = fontWeight)
+            } else {
+                TextButton(onClick = { onActionClick?.invoke() }) {
+                    Text(action)
+                }
+            }
         }
     }
 }

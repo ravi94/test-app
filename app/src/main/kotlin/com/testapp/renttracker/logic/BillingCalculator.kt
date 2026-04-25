@@ -2,7 +2,6 @@ package com.testapp.renttracker.logic
 
 import com.testapp.renttracker.error.ErrorCodes
 import com.testapp.renttracker.error.ValidationError
-import com.testapp.renttracker.model.Flat
 import com.testapp.renttracker.model.FlatUsage
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -10,12 +9,12 @@ import java.math.RoundingMode
 object BillingCalculator {
     private val ZERO = BigDecimal.ZERO
 
-    fun computeElectricityChargeByFlat(
-        flats: List<Flat>,
+    fun computeElectricityChargeByFlatLabel(
+        flatLabels: List<String>,
         usages: List<FlatUsage>,
         ratePerUnit: BigDecimal,
     ): Map<String, BigDecimal> {
-        val usageByFlat = usages.associateBy { it.flatId }
+        val usageByFlat = usages.associateBy { it.flatLabel }
         if (ratePerUnit < ZERO) {
             throw ValidationError(
                 code = ErrorCodes.INVALID_AMOUNT,
@@ -24,10 +23,10 @@ object BillingCalculator {
             )
         }
 
-        return flats.associate { flat ->
-            val units = usageByFlat[flat.id]?.unitsConsumed ?: ZERO
+        return flatLabels.associateWith { flatLabel ->
+            val units = usageByFlat[flatLabel]?.unitsConsumed ?: ZERO
             val charge = units.multiply(ratePerUnit).setScale(2, RoundingMode.HALF_UP)
-            flat.id to charge
+            charge
         }
     }
 }

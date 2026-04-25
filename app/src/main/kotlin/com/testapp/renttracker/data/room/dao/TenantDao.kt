@@ -14,9 +14,15 @@ interface TenantDao {
     @Query("SELECT * FROM tenants WHERE is_active = 1")
     suspend fun getActiveTenants(): List<TenantEntity>
 
-    @Query("SELECT * FROM tenants WHERE flat_id = :flatId AND is_active = 1 LIMIT 1")
-    suspend fun getActiveTenantByFlat(flatId: String): TenantEntity?
+    @Query("SELECT * FROM tenants")
+    suspend fun getAllTenants(): List<TenantEntity>
+
+    @Query("SELECT * FROM tenants WHERE flat_label = :flatLabel AND is_active = 1 LIMIT 1")
+    suspend fun getActiveTenantByFlatLabel(flatLabel: String): TenantEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(tenant: TenantEntity)
+
+    @Query("DELETE FROM tenants WHERE id = :tenantId")
+    suspend fun deleteById(tenantId: String)
 }

@@ -2,7 +2,6 @@ package com.testapp.renttracker
 
 import com.testapp.renttracker.error.ErrorCodes
 import com.testapp.renttracker.error.ValidationError
-import com.testapp.renttracker.model.Flat
 import com.testapp.renttracker.model.PaymentStatus
 import com.testapp.renttracker.model.PaymentComponent
 import com.testapp.renttracker.model.RecordPaymentInput
@@ -45,16 +44,10 @@ class ServicesFlowTest {
 
     @Test
     fun `full cycle computes carry-forward and overall tenant summary`() {
-        val flatRepo = InMemoryFlatRepo(
-            mutableListOf(
-                Flat("F1", "A-101", BigDecimal("5000.00")),
-                Flat("F2", "A-102", BigDecimal("6000.00")),
-            )
-        )
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "F1"),
-                Tenant("T2", "Aman", "F2"),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00")),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00")),
             )
         )
         val monthRepo = InMemoryBillingMonthRepo()
@@ -63,14 +56,14 @@ class ServicesFlowTest {
         val paymentRepo = InMemoryPaymentRepo()
         val balanceRepo = InMemoryBalanceRepo()
 
-        val billingService = BillingMonthService(flatRepo, tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
+        val billingService = BillingMonthService(tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
         val paymentService = PaymentService(paymentRepo, chargeRepo, balanceRepo, monthRepo, SequenceIdGenerator())
         val dashboard = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)
 
         billingService.createBillingMonth("2026-02")
         billingService.setElectricityRate("2026-02", BigDecimal("8.00"))
-        billingService.upsertFlatUsage("2026-02", "F1", BigDecimal("10"))
-        billingService.upsertFlatUsage("2026-02", "F2", BigDecimal("20"))
+        billingService.upsertFlatUsage("2026-02", "A-101", BigDecimal("10"))
+        billingService.upsertFlatUsage("2026-02", "A-102", BigDecimal("20"))
         billingService.computeMonthCharges("2026-02")
 
         val febCharges = chargeRepo.getChargesByMonth("2026-02").associateBy { it.tenantId }
@@ -93,8 +86,8 @@ class ServicesFlowTest {
 
         billingService.createBillingMonth("2026-03")
         billingService.setElectricityRate("2026-03", BigDecimal("8.00"))
-        billingService.upsertFlatUsage("2026-03", "F1", BigDecimal("20"))
-        billingService.upsertFlatUsage("2026-03", "F2", BigDecimal("40"))
+        billingService.upsertFlatUsage("2026-03", "A-101", BigDecimal("20"))
+        billingService.upsertFlatUsage("2026-03", "A-102", BigDecimal("40"))
         billingService.computeMonthCharges("2026-03")
 
         val marCharges = chargeRepo.getChargesByMonth("2026-03").associateBy { it.tenantId }
@@ -141,7 +134,7 @@ class ServicesFlowTest {
     fun `overall summary marks overpaid tenant as paid`() {
         val chargeRepo = InMemoryChargeRepo()
         val paymentRepo = InMemoryPaymentRepo()
-        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "F1")))
+        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"))))
         val dashboard = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)
 
         chargeRepo.replaceMonthCharges(
@@ -204,8 +197,8 @@ class ServicesFlowTest {
         val paymentRepo = InMemoryPaymentRepo()
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "F1"),
-                Tenant("T2", "Aman", "F2"),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00")),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00")),
             )
         )
         val dashboard = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)

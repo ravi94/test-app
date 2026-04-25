@@ -3,18 +3,11 @@ package com.testapp.renttracker.model
 import java.math.BigDecimal
 import java.time.LocalDate
 
-data class Flat(
-    val id: String,
-    val unitLabel: String,
-    val fixedMonthlyRent: BigDecimal,
-    val isActive: Boolean = true,
-    val notes: String? = null,
-)
-
 data class Tenant(
     val id: String,
     val name: String,
-    val flatId: String,
+    val flatLabel: String,
+    val monthlyRent: BigDecimal,
     val phone: String? = null,
     val isActive: Boolean = true,
     val notes: String? = null,
@@ -27,7 +20,7 @@ data class BillingMonth(
 )
 
 data class FlatUsage(
-    val flatId: String,
+    val flatLabel: String,
     val billingMonthId: String,
     val unitsConsumed: BigDecimal,
 )

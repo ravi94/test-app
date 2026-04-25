@@ -9,7 +9,6 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 class BillingMonthService(
-    private val flatRepo: FlatRepository,
     private val tenantRepo: TenantRepository,
     private val monthRepo: BillingMonthRepository,
     private val usageRepo: FlatUsageRepository,
@@ -37,11 +36,11 @@ class BillingMonthService(
         monthRepo.updateMonth(month.copy(electricityRatePerUnit = ratePerUnit.setScale(2, RoundingMode.HALF_UP)))
     }
 
-    fun upsertFlatUsage(monthId: String, flatId: String, units: BigDecimal) {
+    fun upsertFlatUsage(monthId: String, flatLabel: String, units: BigDecimal) {
         requireNonNegative(units, "units")
         usageRepo.upsertUsage(
             FlatUsage(
-                flatId = flatId,
+                flatLabel = flatLabel,
                 billingMonthId = monthId,
                 unitsConsumed = units.setScale(2, RoundingMode.HALF_UP),
             )
@@ -50,29 +49,27 @@ class BillingMonthService(
 
     fun computeMonthCharges(monthId: String) {
         val month = requireMonth(monthId)
-        val activeFlats = flatRepo.getActiveFlats()
         val activeTenants = tenantRepo.getActiveTenants()
+        val activeFlatLabels = activeTenants.map { it.flatLabel }.distinct()
 
         val usage = usageRepo.getUsageByMonth(monthId)
-        val electricityByFlat = BillingCalculator.computeElectricityChargeByFlat(
-            flats = activeFlats,
+        val electricityByFlat = BillingCalculator.computeElectricityChargeByFlatLabel(
+            flatLabels = activeFlatLabels,
             usages = usage,
             ratePerUnit = month.electricityRatePerUnit,
         )
 
         val charges = activeTenants.map { tenant ->
-            val flat = flatRepo.getFlatById(tenant.flatId)
-                ?: throw ValidationError(ErrorCodes.INVALID_FLAT_TENANT_LINK, "Tenant linked flat not found")
-            if (!flat.isActive) {
-                throw ValidationError(ErrorCodes.INVALID_FLAT_TENANT_LINK, "Active tenant must map to active flat")
+            if (tenant.flatLabel.isBlank()) {
+                throw ValidationError(ErrorCodes.INVALID_FLAT_TENANT_LINK, "Active tenant must have a flat label")
             }
 
             val previousMonthId = previousMonth(monthId)
             val previousBalance = previousMonthId?.let { balanceRepo.getBalance(tenant.id, it)?.balanceAmount } ?: BigDecimal.ZERO
             val adjustmentAmount = previousBalance.setScale(2, RoundingMode.HALF_UP)
 
-            val rent = flat.fixedMonthlyRent.setScale(2, RoundingMode.HALF_UP)
-            val electricityShare = (electricityByFlat[flat.id] ?: BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP)
+            val rent = tenant.monthlyRent.setScale(2, RoundingMode.HALF_UP)
+            val electricityShare = (electricityByFlat[tenant.flatLabel] ?: BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP)
             val totalDue = rent.add(electricityShare).subtract(adjustmentAmount).setScale(2, RoundingMode.HALF_UP)
 
             TenantMonthlyCharge(

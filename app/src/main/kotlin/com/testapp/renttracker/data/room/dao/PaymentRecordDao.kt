@@ -19,4 +19,7 @@ interface PaymentRecordDao {
 
     @Query("SELECT * FROM payment_records")
     suspend fun getAll(): List<PaymentRecordEntity>
+
+    @Query("DELETE FROM payment_records WHERE tenant_id = :tenantId")
+    suspend fun deleteByTenant(tenantId: String)
 }

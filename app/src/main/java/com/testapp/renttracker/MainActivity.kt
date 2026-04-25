@@ -14,6 +14,7 @@ import com.testapp.renttracker.data.room.migration.Migrations
 import com.testapp.renttracker.presentation.billing.MonthlyBillingViewModel
 import com.testapp.renttracker.presentation.common.AppGraph
 import com.testapp.renttracker.presentation.dashboard.DashboardViewModel
+import com.testapp.renttracker.presentation.onboarding.TenantOnboardingViewModel
 import com.testapp.renttracker.presentation.payment.PaymentViewModel
 import com.testapp.renttracker.ui.RentTrackerApp
 
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
             .addMigrations(
                 Migrations.MIGRATION_1_2,
                 Migrations.MIGRATION_2_3,
+                Migrations.MIGRATION_3_4,
             )
             .build()
 
@@ -44,6 +46,9 @@ class MainActivity : ComponentActivity() {
     private val dashboardViewModel: DashboardViewModel by viewModels {
         appGraph.dashboardViewModelFactory()
     }
+    private val tenantOnboardingViewModel: TenantOnboardingViewModel by viewModels {
+        appGraph.tenantOnboardingViewModelFactory()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,6 +62,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     RentTrackerApp(
+                        tenantOnboardingViewModel = tenantOnboardingViewModel,
                         billingViewModel = billingViewModel,
                         paymentViewModel = paymentViewModel,
                         dashboardViewModel = dashboardViewModel,

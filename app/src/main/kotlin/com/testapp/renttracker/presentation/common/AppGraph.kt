@@ -1,9 +1,7 @@
 package com.testapp.renttracker.presentation.common
 
-import com.testapp.renttracker.data.room.entity.FlatEntity
 import com.testapp.renttracker.data.room.entity.TenantEntity
 import com.testapp.renttracker.data.repo.RoomBillingMonthRepository
-import com.testapp.renttracker.data.repo.RoomFlatRepository
 import com.testapp.renttracker.data.repo.RoomFlatUsageRepository
 import com.testapp.renttracker.data.repo.RoomPaymentRecordRepository
 import com.testapp.renttracker.data.repo.RoomTenantBalanceRepository
@@ -13,17 +11,19 @@ import com.testapp.renttracker.data.repo.UuidIdGenerator
 import com.testapp.renttracker.data.room.RentTrackerDatabase
 import com.testapp.renttracker.presentation.billing.MonthlyBillingViewModel
 import com.testapp.renttracker.presentation.dashboard.DashboardViewModel
+import com.testapp.renttracker.presentation.onboarding.TenantOnboardingViewModel
 import com.testapp.renttracker.presentation.payment.PaymentViewModel
 import com.testapp.renttracker.service.BillingMonthService
 import com.testapp.renttracker.service.DashboardQueryService
 import com.testapp.renttracker.service.PaymentService
+import com.testapp.renttracker.service.TenantManagementService
+import com.testapp.renttracker.service.TenantOnboardingService
 import kotlinx.coroutines.runBlocking
 import java.math.BigDecimal
 
 class AppGraph(
     private val db: RentTrackerDatabase,
 ) {
-    private val flatRepo = RoomFlatRepository(db.flatDao())
     private val tenantRepo = RoomTenantRepository(db.tenantDao())
     private val monthRepo = RoomBillingMonthRepository(db.billingMonthDao())
     private val usageRepo = RoomFlatUsageRepository(db.flatUsageDao())
@@ -33,7 +33,6 @@ class AppGraph(
     private val idGenerator = UuidIdGenerator()
 
     private val billingService = BillingMonthService(
-        flatRepo = flatRepo,
         tenantRepo = tenantRepo,
         monthRepo = monthRepo,
         usageRepo = usageRepo,
@@ -51,6 +50,17 @@ class AppGraph(
         chargeRepo = chargeRepo,
         paymentRepo = paymentRepo,
         tenantRepo = tenantRepo,
+    )
+    private val tenantOnboardingService = TenantOnboardingService(
+        tenantRepo = tenantRepo,
+        balanceRepo = balanceRepo,
+        idGenerator = idGenerator,
+    )
+    private val tenantManagementService = TenantManagementService(
+        tenantRepo = tenantRepo,
+        chargeRepo = chargeRepo,
+        paymentRepo = paymentRepo,
+        balanceRepo = balanceRepo,
     )
 
     fun billingViewModelFactory() = SimpleViewModelFactory {
@@ -70,37 +80,27 @@ class AppGraph(
     }
 
     fun dashboardViewModelFactory() = SimpleViewModelFactory {
-        DashboardViewModel(dashboardQueryService)
+        DashboardViewModel(
+            dashboardQueryService = dashboardQueryService,
+            tenantManagementService = tenantManagementService,
+        )
+    }
+
+    fun tenantOnboardingViewModelFactory() = SimpleViewModelFactory {
+        TenantOnboardingViewModel(
+            onboardingService = tenantOnboardingService,
+        )
     }
 
     fun seedDemoDataIfEmpty() {
         runBlocking {
-            if (db.flatDao().countAll() == 0) {
-                db.flatDao().upsert(
-                    FlatEntity(
-                        id = "F1",
-                        unitLabel = "A-101",
-                        fixedMonthlyRent = BigDecimal("5000.00"),
-                        isActive = true,
-                        notes = "Demo flat",
-                    )
-                )
-                db.flatDao().upsert(
-                    FlatEntity(
-                        id = "F2",
-                        unitLabel = "A-102",
-                        fixedMonthlyRent = BigDecimal("6000.00"),
-                        isActive = true,
-                        notes = "Demo flat",
-                    )
-                )
-            }
             if (db.tenantDao().countAll() == 0) {
                 db.tenantDao().upsert(
                     TenantEntity(
                         id = "T1",
                         name = "Tenant One",
-                        flatId = "F1",
+                        flatLabel = "A-101",
+                        monthlyRent = BigDecimal("5000.00"),
                         phone = null,
                         isActive = true,
                         notes = "Demo tenant",
@@ -110,7 +110,8 @@ class AppGraph(
                     TenantEntity(
                         id = "T2",
                         name = "Tenant Two",
-                        flatId = "F2",
+                        flatLabel = "A-102",
+                        monthlyRent = BigDecimal("6000.00"),
                         phone = null,
                         isActive = true,
                         notes = "Demo tenant",

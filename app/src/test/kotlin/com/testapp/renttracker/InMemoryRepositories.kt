@@ -3,14 +3,22 @@ package com.testapp.renttracker
 import com.testapp.renttracker.model.*
 import com.testapp.renttracker.repo.*
 
-class InMemoryFlatRepo(private val flats: MutableList<Flat> = mutableListOf()) : FlatRepository {
-    override fun getActiveFlats(): List<Flat> = flats.filter { it.isActive }
-    override fun getFlatById(flatId: String): Flat? = flats.firstOrNull { it.id == flatId }
-}
-
 class InMemoryTenantRepo(private val tenants: MutableList<Tenant> = mutableListOf()) : TenantRepository {
     override fun getActiveTenants(): List<Tenant> = tenants.filter { it.isActive }
-    override fun getActiveTenantByFlat(flatId: String): Tenant? = tenants.firstOrNull { it.flatId == flatId && it.isActive }
+    override fun getAllTenants(): List<Tenant> = tenants.toList()
+    override fun getActiveTenantByFlatLabel(flatLabel: String): Tenant? =
+        tenants.firstOrNull { it.flatLabel == flatLabel && it.isActive }
+    override fun upsertTenant(tenant: Tenant) {
+        val index = tenants.indexOfFirst { it.id == tenant.id }
+        if (index >= 0) {
+            tenants[index] = tenant
+        } else {
+            tenants += tenant
+        }
+    }
+    override fun deleteTenantById(tenantId: String) {
+        tenants.removeAll { it.id == tenantId }
+    }
 }
 
 class InMemoryBillingMonthRepo : BillingMonthRepository {
@@ -29,7 +37,7 @@ class InMemoryFlatUsageRepo : FlatUsageRepository {
     private val map = linkedMapOf<Pair<String, String>, FlatUsage>()
 
     override fun upsertUsage(usage: FlatUsage) {
-        map[usage.flatId to usage.billingMonthId] = usage
+        map[usage.flatLabel to usage.billingMonthId] = usage
     }
 
     override fun getUsageByMonth(monthId: String): List<FlatUsage> = map.values.filter { it.billingMonthId == monthId }
@@ -45,6 +53,10 @@ class InMemoryChargeRepo : TenantMonthlyChargeRepository {
     override fun getChargesByMonth(monthId: String): List<TenantMonthlyCharge> = byMonth[monthId].orEmpty()
 
     override fun getAllCharges(): List<TenantMonthlyCharge> = byMonth.values.flatten()
+
+    override fun deleteChargesByTenant(tenantId: String) {
+        byMonth.replaceAll { _, charges -> charges.filterNot { it.tenantId == tenantId } }
+    }
 }
 
 class InMemoryPaymentRepo : PaymentRecordRepository {
@@ -61,6 +73,10 @@ class InMemoryPaymentRepo : PaymentRecordRepository {
     }
 
     override fun getAllPayments(): List<PaymentRecord> = payments.toList()
+
+    override fun deletePaymentsByTenant(tenantId: String) {
+        payments.removeAll { it.tenantId == tenantId }
+    }
 }
 
 class InMemoryBalanceRepo : TenantBalanceRepository {
@@ -74,6 +90,10 @@ class InMemoryBalanceRepo : TenantBalanceRepository {
 
     override fun getAllBalancesForMonth(asOfMonthId: String): List<TenantBalance> {
         return balances.values.filter { it.asOfMonthId == asOfMonthId }
+    }
+
+    override fun deleteBalancesByTenant(tenantId: String) {
+        balances.keys.removeAll { (existingTenantId, _) -> existingTenantId == tenantId }
     }
 }
 

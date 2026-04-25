@@ -83,4 +83,66 @@ object Migrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS `idx_payments_tenant_month` ON `payment_records` (`tenant_id`, `billing_month_id`)")
         }
     }
+
+    val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `tenants_new` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `flat_label` TEXT NOT NULL,
+                    `monthly_rent` TEXT NOT NULL,
+                    `phone` TEXT,
+                    `is_active` INTEGER NOT NULL,
+                    `notes` TEXT,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_tenants_flat_label` ON `tenants_new` (`flat_label`)")
+            db.execSQL(
+                """
+                INSERT INTO `tenants_new` (`id`, `name`, `flat_label`, `monthly_rent`, `phone`, `is_active`, `notes`)
+                SELECT t.`id`,
+                       t.`name`,
+                       COALESCE(f.`unit_label`, t.`flat_id`, ''),
+                       COALESCE(f.`fixed_monthly_rent`, '0.00'),
+                       t.`phone`,
+                       t.`is_active`,
+                       t.`notes`
+                FROM `tenants` t
+                LEFT JOIN `flats` f ON f.`id` = t.`flat_id`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `tenants`")
+            db.execSQL("ALTER TABLE `tenants_new` RENAME TO `tenants`")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `flat_usage_new` (
+                    `flat_label` TEXT NOT NULL,
+                    `billing_month_id` TEXT NOT NULL,
+                    `units_consumed` TEXT NOT NULL,
+                    PRIMARY KEY(`flat_label`, `billing_month_id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `flat_usage_new` (`flat_label`, `billing_month_id`, `units_consumed`)
+                SELECT COALESCE(f.`unit_label`, fu.`flat_id`, ''),
+                       fu.`billing_month_id`,
+                       fu.`units_consumed`
+                FROM `flat_usage` fu
+                LEFT JOIN `flats` f ON f.`id` = fu.`flat_id`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `flat_usage`")
+            db.execSQL("ALTER TABLE `flat_usage_new` RENAME TO `flat_usage`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_flat_usage_billing_month_id` ON `flat_usage` (`billing_month_id`)")
+
+            db.execSQL("DROP TABLE IF EXISTS `flats`")
+        }
+    }
 }

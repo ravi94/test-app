@@ -16,4 +16,7 @@ interface TenantBalanceDao {
 
     @Query("SELECT * FROM tenant_balances WHERE as_of_month_id = :asOfMonthId")
     suspend fun getAllForMonth(asOfMonthId: String): List<TenantBalanceEntity>
+
+    @Query("DELETE FROM tenant_balances WHERE tenant_id = :tenantId")
+    suspend fun deleteByTenant(tenantId: String)
 }
