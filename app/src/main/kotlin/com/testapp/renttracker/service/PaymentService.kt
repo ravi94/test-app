@@ -4,6 +4,7 @@ import com.testapp.renttracker.error.ErrorCodes
 import com.testapp.renttracker.error.ValidationError
 import com.testapp.renttracker.model.*
 import com.testapp.renttracker.repo.IdGenerator
+import com.testapp.renttracker.repo.BillingMonthRepository
 import com.testapp.renttracker.repo.PaymentRecordRepository
 import com.testapp.renttracker.repo.TenantBalanceRepository
 import com.testapp.renttracker.repo.TenantMonthlyChargeRepository
@@ -14,6 +15,7 @@ class PaymentService(
     private val paymentRepo: PaymentRecordRepository,
     private val chargeRepo: TenantMonthlyChargeRepository,
     private val balanceRepo: TenantBalanceRepository,
+    private val monthRepo: BillingMonthRepository,
     private val idGenerator: IdGenerator,
 ) {
     fun recordPayment(input: RecordPaymentInput): PaymentRecord {
@@ -29,6 +31,22 @@ class PaymentService(
                 code = ErrorCodes.INVALID_AMOUNT,
                 message = "Paid amount must be greater than zero",
                 field = "amountPaid",
+            )
+        }
+        if (monthRepo.getMonth(input.billingMonthId) == null) {
+            throw ValidationError(
+                code = ErrorCodes.MONTH_NOT_FOUND,
+                message = "Create the billing month before recording payment",
+                field = "billingMonthId",
+            )
+        }
+        val chargeForTenant = chargeRepo.getChargesByMonth(input.billingMonthId)
+            .firstOrNull { it.tenantId == input.tenantId }
+        if (chargeForTenant == null) {
+            throw ValidationError(
+                code = ErrorCodes.INVALID_FLAT_TENANT_LINK,
+                message = "Selected tenant has no charges for the chosen month",
+                field = "tenantId",
             )
         }
 

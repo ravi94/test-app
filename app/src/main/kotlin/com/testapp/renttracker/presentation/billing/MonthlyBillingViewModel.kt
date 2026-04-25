@@ -3,7 +3,13 @@ package com.testapp.renttracker.presentation.billing
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.testapp.renttracker.error.ValidationError
+import com.testapp.renttracker.model.BillingMonth
+import com.testapp.renttracker.model.BillingMonthStatus
+import com.testapp.renttracker.model.Tenant
 import com.testapp.renttracker.model.TenantMonthlyCharge
+import com.testapp.renttracker.repo.BillingMonthRepository
+import com.testapp.renttracker.repo.FlatUsageRepository
+import com.testapp.renttracker.repo.TenantRepository
 import com.testapp.renttracker.service.BillingMonthService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,46 +17,59 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 class MonthlyBillingViewModel(
     private val billingService: BillingMonthService,
+    private val tenantRepo: TenantRepository,
+    private val monthRepo: BillingMonthRepository,
+    private val usageRepo: FlatUsageRepository,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(MonthlyBillingUiState())
+    private val _state = MutableStateFlow(
+        MonthlyBillingUiState(
+            availableTenants = tenantRepo.getActiveTenants(),
+        )
+    )
     val state: StateFlow<MonthlyBillingUiState> = _state.asStateFlow()
+
+    init {
+        val initialTenantId = _state.value.availableTenants.firstOrNull()?.id
+        if (initialTenantId != null) {
+            _state.update { it.copy(selectedTenantId = initialTenantId) }
+        }
+        refreshFormState()
+    }
 
     fun setMonth(monthId: String) {
         _state.update { it.copy(monthId = monthId) }
+        refreshFormState()
     }
 
-    fun createMonth() {
-        val monthId = _state.value.monthId ?: return
-        execute("Month created") {
-            billingService.createBillingMonth(monthId)
-        }
+    fun setSelectedTenant(tenantId: String) {
+        _state.update { it.copy(selectedTenantId = tenantId) }
+        refreshFormState()
     }
 
-    fun setElectricityRate(ratePerUnit: String) {
-        val monthId = _state.value.monthId ?: return
-        execute("Per-unit rate saved") {
-            billingService.setElectricityRate(monthId, ratePerUnit.toBigDecimal())
-            _state.update { it.copy(electricityRateInput = ratePerUnit) }
-        }
+    fun setElectricityRateInput(ratePerUnit: String) {
+        _state.update { it.copy(electricityRateInput = ratePerUnit) }
     }
 
-    fun setFlatUnits(flatId: String, units: String) {
-        val monthId = _state.value.monthId ?: return
-        execute("Units saved for $flatId") {
-            billingService.upsertFlatUsage(monthId, flatId, units.toBigDecimal())
-            _state.update { current ->
-                current.copy(flatUnitsInput = current.flatUnitsInput + (flatId to units))
-            }
-        }
+    fun setSelectedTenantUnitsInput(units: String) {
+        _state.update { it.copy(selectedTenantUnitsInput = units) }
     }
 
-    fun computeCharges() {
-        val monthId = _state.value.monthId ?: return
-        execute("Charges computed") {
+    fun saveBillingEntry() {
+        val current = _state.value
+        val monthId = current.monthId ?: return
+        val tenant = current.availableTenants.firstOrNull { it.id == current.selectedTenantId } ?: return
+
+        execute("Billing updated") {
+            ensureMonthExists(monthId)
+            billingService.setElectricityRate(monthId, current.electricityRateInput.toBigDecimal())
+            billingService.upsertFlatUsage(monthId, tenant.flatId, current.selectedTenantUnitsInput.toBigDecimal())
             billingService.computeMonthCharges(monthId)
+            refreshFormState()
         }
     }
 
@@ -66,6 +85,35 @@ class MonthlyBillingViewModel(
         _state.update { it.copy(computedCharges = charges) }
     }
 
+    private fun refreshFormState() {
+        val current = _state.value
+        val monthId = current.monthId ?: return
+        val tenant = current.availableTenants.firstOrNull { it.id == current.selectedTenantId }
+        val month = monthRepo.getMonth(monthId)
+        val usageByFlat = usageRepo.getUsageByMonth(monthId).associateBy { it.flatId }
+        val unitsForTenant = tenant?.let { usageByFlat[it.flatId]?.unitsConsumed?.formatAmount() }.orEmpty()
+
+        _state.update {
+            it.copy(
+                selectedTenantUnitsInput = unitsForTenant,
+                electricityRateInput = month?.electricityRatePerUnit?.formatAmount() ?: it.electricityRateInput,
+                isFinalized = month?.status == BillingMonthStatus.Finalized,
+            )
+        }
+    }
+
+    private fun ensureMonthExists(monthId: String) {
+        if (monthRepo.getMonth(monthId) == null) {
+            monthRepo.createMonth(
+                BillingMonth(
+                    id = monthId,
+                    electricityRatePerUnit = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                    status = BillingMonthStatus.Draft,
+                )
+            )
+        }
+    }
+
     private fun execute(successMessage: String, block: () -> Unit) {
         _state.update { it.copy(isLoading = true, error = null, message = null) }
         viewModelScope.launch(Dispatchers.IO) {
@@ -79,12 +127,16 @@ class MonthlyBillingViewModel(
             }
         }
     }
+
+    private fun BigDecimal.formatAmount(): String = setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
 }
 
 data class MonthlyBillingUiState(
     val monthId: String? = "2026-02",
+    val availableTenants: List<Tenant> = emptyList(),
+    val selectedTenantId: String = "",
+    val selectedTenantUnitsInput: String = "",
     val electricityRateInput: String = "",
-    val flatUnitsInput: Map<String, String> = emptyMap(),
     val computedCharges: List<TenantMonthlyCharge> = emptyList(),
     val isFinalized: Boolean = false,
     val isLoading: Boolean = false,

@@ -19,7 +19,13 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -27,6 +33,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +55,9 @@ import com.testapp.renttracker.presentation.payment.PaymentDraft
 import com.testapp.renttracker.presentation.payment.PaymentViewModel
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 private enum class RootTab { Billing, Payment, Dashboard }
 
@@ -86,11 +96,8 @@ fun RentTrackerApp(
 @Composable
 private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-
-    var monthId by remember { mutableStateOf("2026-02") }
-    var electricityRate by remember { mutableStateOf("12.00") }
-    var f1Units by remember { mutableStateOf("40") }
-    var f2Units by remember { mutableStateOf("60") }
+    val monthId = state.monthId ?: "2026-02"
+    val selectedTenant = state.availableTenants.firstOrNull { it.id == state.selectedTenantId }
 
     Column(
         modifier = Modifier
@@ -101,49 +108,37 @@ private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
     ) {
         Text("Monthly Billing", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-        OutlinedTextField(
+        TenantDropdownField(
+            selectedTenantId = state.selectedTenantId,
+            tenants = state.availableTenants,
+            onTenantSelected = viewModel::setSelectedTenant,
+        )
+
+        MonthYearPickerField(
             value = monthId,
-            onValueChange = {
-                monthId = it
-                viewModel.setMonth(it)
-            },
-            label = { Text("Month (YYYY-MM)") },
-            modifier = Modifier.fillMaxWidth(),
+            label = "Billing Month",
+            onValueChange = viewModel::setMonth,
         )
 
         OutlinedTextField(
-            value = electricityRate,
-            onValueChange = { electricityRate = it },
+            value = state.electricityRateInput,
+            onValueChange = viewModel::setElectricityRateInput,
             label = { Text("Electricity Rate Per Unit") },
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.createMonth() }) { Text("Create Month") }
-            Button(onClick = { viewModel.setElectricityRate(electricityRate) }) { Text("Save Rate") }
-        }
-
         OutlinedTextField(
-            value = f1Units,
-            onValueChange = { f1Units = it },
-            label = { Text("Units F1") },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = f2Units,
-            onValueChange = { f2Units = it },
-            label = { Text("Units F2") },
+            value = state.selectedTenantUnitsInput,
+            onValueChange = viewModel::setSelectedTenantUnitsInput,
+            label = { Text("Units") },
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.setFlatUnits("F1", f1Units) }) { Text("Save F1") }
-            Button(onClick = { viewModel.setFlatUnits("F2", f2Units) }) { Text("Save F2") }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.computeCharges() }) { Text("Compute") }
-            Button(onClick = { viewModel.finalizeMonth() }) { Text("Finalize") }
+        Button(
+            onClick = { viewModel.saveBillingEntry() },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Save Billing")
         }
 
         if (state.isLoading) {
@@ -152,8 +147,11 @@ private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
         if (state.message != null) {
             Text(state.message ?: "", color = MaterialTheme.colorScheme.primary)
         }
-        if (state.isFinalized) {
-            Text("Month finalized", color = MaterialTheme.colorScheme.primary)
+        selectedTenant?.let { tenant ->
+            Text("Selected Tenant: ${tenant.name} (${tenant.id})")
+            if (state.selectedTenantUnitsInput.isNotBlank()) {
+                Text("Saved Units For $monthId: ${state.selectedTenantUnitsInput}")
+            }
         }
         if (state.error != null) {
             Text(state.error ?: "", color = MaterialTheme.colorScheme.error)
@@ -164,11 +162,13 @@ private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
 @Composable
 private fun PaymentScreen(viewModel: PaymentViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val today = LocalDate.now()
+    val tenants = state.availableTenants
 
-    var tenantId by remember { mutableStateOf("T1") }
-    var monthId by remember { mutableStateOf("2026-02") }
+    var tenantId by remember { mutableStateOf(tenants.firstOrNull()?.id ?: "T1") }
+    var monthId by remember { mutableStateOf("%04d-%02d".format(today.year, today.monthValue)) }
     var amount by remember { mutableStateOf("500.00") }
-    var paidOn by remember { mutableStateOf("2026-02-10") }
+    var paidOn by remember { mutableStateOf(today.toString()) }
 
     Column(
         modifier = Modifier
@@ -179,17 +179,15 @@ private fun PaymentScreen(viewModel: PaymentViewModel) {
     ) {
         Text("Payments", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-        OutlinedTextField(
-            value = tenantId,
-            onValueChange = { tenantId = it },
-            label = { Text("Tenant ID") },
-            modifier = Modifier.fillMaxWidth(),
+        TenantDropdownField(
+            selectedTenantId = tenantId,
+            tenants = tenants,
+            onTenantSelected = { tenantId = it },
         )
-        OutlinedTextField(
+        MonthYearPickerField(
             value = monthId,
+            label = "Payment Month",
             onValueChange = { monthId = it },
-            label = { Text("Month") },
-            modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
             value = amount,
@@ -197,11 +195,10 @@ private fun PaymentScreen(viewModel: PaymentViewModel) {
             label = { Text("Amount") },
             modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
+        DatePickerField(
             value = paidOn,
+            label = "Paid On",
             onValueChange = { paidOn = it },
-            label = { Text("Paid On (YYYY-MM-DD)") },
-            modifier = Modifier.fillMaxWidth(),
         )
 
         Button(
@@ -239,6 +236,49 @@ private fun PaymentScreen(viewModel: PaymentViewModel) {
 
         if (state.error != null) {
             Text(state.error ?: "", color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TenantDropdownField(
+    selectedTenantId: String,
+    tenants: List<com.testapp.renttracker.model.Tenant>,
+    onTenantSelected: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedTenant = tenants.firstOrNull { it.id == selectedTenantId }
+    val displayValue = selectedTenant?.let { "${it.name} (${it.id})" } ?: selectedTenantId
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+    ) {
+        OutlinedTextField(
+            value = displayValue,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Tenant") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            tenants.forEach { tenant ->
+                DropdownMenuItem(
+                    text = { Text("${tenant.name} (${tenant.id})") },
+                    onClick = {
+                        onTenantSelected(tenant.id)
+                        expanded = false
+                    },
+                )
+            }
         }
     }
 }
@@ -501,6 +541,286 @@ private fun MonthlyAmountRow(
             Text(amount, modifier = Modifier.width(110.dp), fontWeight = fontWeight)
         }
     }
+}
+
+@Composable
+private fun MonthYearPickerField(
+    value: String,
+    label: String,
+    onValueChange: (String) -> Unit,
+) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showPicker = true },
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    value.toDisplayMonthYear(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Text(
+                "Select",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(2.dp))
+
+    if (showPicker) {
+        MonthYearPickerDialog(
+            initialValue = value,
+            onDismiss = { showPicker = false },
+            onConfirm = {
+                onValueChange(it)
+                showPicker = false
+            },
+        )
+    }
+}
+
+private fun String.toDisplayMonthYear(): String {
+    val parts = split("-")
+    val year = parts.getOrNull(0)?.toIntOrNull() ?: return this
+    val month = parts.getOrNull(1)?.toIntOrNull() ?: return this
+    val monthName = month.monthName()
+    if (monthName.isEmpty()) return this
+    return "$monthName $year"
+}
+
+private fun String.toDisplayDate(): String {
+    val parsed = runCatching { LocalDate.parse(this) }.getOrNull() ?: return this
+    return "${parsed.dayOfMonth} ${parsed.monthValue.monthName()} ${parsed.year}"
+}
+
+@Composable
+private fun MonthYearPickerDialog(
+    initialValue: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val today = LocalDate.now()
+    val initialParts = initialValue.split("-")
+    var selectedYear by remember {
+        mutableStateOf(initialParts.getOrNull(0)?.toIntOrNull() ?: today.year)
+    }
+    var selectedMonth by remember {
+        mutableStateOf(initialParts.getOrNull(1)?.toIntOrNull() ?: today.monthValue)
+    }
+    val years = remember(today.year) { (today.year - 5..today.year + 5).toList() }
+    val months = remember { (1..12).map { it to it.monthName() } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Month") },
+        text = {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SelectionColumn(
+                    title = "Month",
+                    options = months.map { it.second },
+                    selectedOption = selectedMonth.monthName(),
+                    onSelect = { monthName ->
+                        selectedMonth = months.first { it.second == monthName }.first
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                SelectionColumn(
+                    title = "Year",
+                    options = years.map { it.toString() },
+                    selectedOption = selectedYear.toString(),
+                    onSelect = { selectedYear = it.toInt() },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm("%04d-%02d".format(selectedYear, selectedMonth)) }
+            ) {
+                Text("Done")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePickerField(
+    value: String,
+    label: String,
+    onValueChange: (String) -> Unit,
+) {
+    var showPicker by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showPicker = true },
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    value.toDisplayDate(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Text(
+                "Select",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(2.dp))
+
+    if (showPicker) {
+        DatePickerFieldDialog(
+            initialValue = value,
+            onDismiss = { showPicker = false },
+            onConfirm = {
+                onValueChange(it)
+                showPicker = false
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePickerFieldDialog(
+    initialValue: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val initialDate = runCatching { LocalDate.parse(initialValue) }.getOrNull() ?: LocalDate.now()
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = initialDate
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli(),
+    )
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val selectedMillis = datePickerState.selectedDateMillis
+                    if (selectedMillis != null) {
+                        val selectedDate = Instant.ofEpochMilli(selectedMillis)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                        onConfirm(selectedDate.toString())
+                    }
+                },
+            ) {
+                Text("Done")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    ) {
+        DatePicker(state = datePickerState)
+    }
+}
+
+@Composable
+private fun SelectionColumn(
+    title: String,
+    options: List<String>,
+    selectedOption: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(title, fontWeight = FontWeight.Bold)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 220.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            options.forEach { option ->
+                val isSelected = option == selectedOption
+                Surface(
+                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(option) },
+                ) {
+                    Text(
+                        option,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun Int.monthName(): String = when (this) {
+    1 -> "January"
+    2 -> "February"
+    3 -> "March"
+    4 -> "April"
+    5 -> "May"
+    6 -> "June"
+    7 -> "July"
+    8 -> "August"
+    9 -> "September"
+    10 -> "October"
+    11 -> "November"
+    12 -> "December"
+    else -> ""
 }
 
 private fun BigDecimal.money(): String = setScale(2, RoundingMode.HALF_UP).toPlainString()

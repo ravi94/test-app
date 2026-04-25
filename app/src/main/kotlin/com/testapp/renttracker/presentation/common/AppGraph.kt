@@ -44,6 +44,7 @@ class AppGraph(
         paymentRepo = paymentRepo,
         chargeRepo = chargeRepo,
         balanceRepo = balanceRepo,
+        monthRepo = monthRepo,
         idGenerator = idGenerator,
     )
     private val dashboardQueryService = DashboardQueryService(
@@ -53,11 +54,19 @@ class AppGraph(
     )
 
     fun billingViewModelFactory() = SimpleViewModelFactory {
-        MonthlyBillingViewModel(billingService)
+        MonthlyBillingViewModel(
+            billingService = billingService,
+            tenantRepo = tenantRepo,
+            monthRepo = monthRepo,
+            usageRepo = usageRepo,
+        )
     }
 
     fun paymentViewModelFactory() = SimpleViewModelFactory {
-        PaymentViewModel(paymentService)
+        PaymentViewModel(
+            paymentService = paymentService,
+            tenantRepo = tenantRepo,
+        )
     }
 
     fun dashboardViewModelFactory() = SimpleViewModelFactory {

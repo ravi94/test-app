@@ -47,7 +47,7 @@ class DashboardViewModelTest {
         val balanceRepo = InMemoryBalanceRepo()
 
         val billingService = BillingMonthService(flatRepo, tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
-        val paymentService = PaymentService(paymentRepo, chargeRepo, balanceRepo, SequenceIdGenerator())
+        val paymentService = PaymentService(paymentRepo, chargeRepo, balanceRepo, monthRepo, SequenceIdGenerator())
         val dashboardService = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)
         val viewModel = DashboardViewModel(dashboardService)
 

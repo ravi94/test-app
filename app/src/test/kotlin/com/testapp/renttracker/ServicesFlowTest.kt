@@ -24,6 +24,7 @@ class ServicesFlowTest {
             paymentRepo = InMemoryPaymentRepo(),
             chargeRepo = InMemoryChargeRepo(),
             balanceRepo = InMemoryBalanceRepo(),
+            monthRepo = InMemoryBillingMonthRepo(),
             idGenerator = SequenceIdGenerator(),
         )
 
@@ -63,7 +64,7 @@ class ServicesFlowTest {
         val balanceRepo = InMemoryBalanceRepo()
 
         val billingService = BillingMonthService(flatRepo, tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
-        val paymentService = PaymentService(paymentRepo, chargeRepo, balanceRepo, SequenceIdGenerator())
+        val paymentService = PaymentService(paymentRepo, chargeRepo, balanceRepo, monthRepo, SequenceIdGenerator())
         val dashboard = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)
 
         billingService.createBillingMonth("2026-02")
@@ -170,6 +171,31 @@ class ServicesFlowTest {
         val row = dashboard.getOverallSummary().tenantRows.single()
         assertEquals(BigDecimal("-920.00"), row.balance)
         assertEquals(PaymentStatus.Paid, row.status)
+    }
+
+    @Test
+    fun `record payment fails when billing month does not exist`() {
+        val service = PaymentService(
+            paymentRepo = InMemoryPaymentRepo(),
+            chargeRepo = InMemoryChargeRepo(),
+            balanceRepo = InMemoryBalanceRepo(),
+            monthRepo = InMemoryBillingMonthRepo(),
+            idGenerator = SequenceIdGenerator(),
+        )
+
+        val error = assertFailsWith<ValidationError> {
+            service.recordPayment(
+                RecordPaymentInput(
+                    tenantId = "T1",
+                    billingMonthId = "2026-04",
+                    component = PaymentComponent.Combined,
+                    amountPaid = BigDecimal("500.00"),
+                    paidOn = LocalDate.parse("2026-04-01"),
+                )
+            )
+        }
+
+        assertEquals(ErrorCodes.MONTH_NOT_FOUND, error.code)
     }
 
     @Test

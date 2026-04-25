@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.testapp.renttracker.error.ValidationError
 import com.testapp.renttracker.model.PaymentComponent
 import com.testapp.renttracker.model.RecordPaymentInput
+import com.testapp.renttracker.model.Tenant
 import com.testapp.renttracker.model.TenantBalance
+import com.testapp.renttracker.repo.TenantRepository
 import com.testapp.renttracker.service.PaymentService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,8 +19,13 @@ import java.time.LocalDate
 
 class PaymentViewModel(
     private val paymentService: PaymentService,
+    private val tenantRepo: TenantRepository,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(PaymentUiState())
+    private val _state = MutableStateFlow(
+        PaymentUiState(
+            availableTenants = tenantRepo.getActiveTenants(),
+        )
+    )
     val state: StateFlow<PaymentUiState> = _state.asStateFlow()
 
     fun setDraft(draft: PaymentDraft) {
@@ -74,6 +81,7 @@ data class PaymentDraft(
 
 data class PaymentUiState(
     val draft: PaymentDraft = PaymentDraft(),
+    val availableTenants: List<Tenant> = emptyList(),
     val latestBalances: List<TenantBalance> = emptyList(),
     val isLoading: Boolean = false,
     val message: String? = null,
