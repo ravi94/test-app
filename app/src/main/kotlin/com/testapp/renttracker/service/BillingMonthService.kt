@@ -49,7 +49,7 @@ class BillingMonthService(
 
     fun computeMonthCharges(monthId: String) {
         val month = requireMonth(monthId)
-        val activeTenants = tenantRepo.getActiveTenants()
+        val activeTenants = tenantRepo.getActiveTenants().filter { isMonthOnOrAfter(monthId, it.billingStartMonth) }
         val activeFlatLabels = activeTenants.map { it.flatLabel }.distinct()
 
         val usage = usageRepo.getUsageByMonth(monthId)
@@ -113,6 +113,20 @@ class BillingMonthService(
         } else {
             "%04d-%02d".format(year, month - 1)
         }
+    }
+
+    private fun isMonthOnOrAfter(monthId: String, startMonthId: String): Boolean {
+        val month = parseMonth(monthId) ?: return true
+        val start = parseMonth(startMonthId) ?: return true
+        return month >= start
+    }
+
+    private fun parseMonth(monthId: String): Int? {
+        val parts = monthId.split("-")
+        if (parts.size != 2) return null
+        val year = parts[0].toIntOrNull() ?: return null
+        val month = parts[1].toIntOrNull() ?: return null
+        return year * 100 + month
     }
 
     private fun requireNonNegative(value: BigDecimal, field: String) {

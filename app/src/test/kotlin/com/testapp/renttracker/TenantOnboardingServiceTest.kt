@@ -5,6 +5,7 @@ import com.testapp.renttracker.error.ValidationError
 import com.testapp.renttracker.model.CreateTenantOnboardingInput
 import com.testapp.renttracker.model.Tenant
 import com.testapp.renttracker.service.BillingMonthService
+import com.testapp.renttracker.service.DashboardQueryService
 import com.testapp.renttracker.service.TenantOnboardingService
 import java.math.BigDecimal
 import kotlin.test.Test
@@ -36,6 +37,7 @@ class TenantOnboardingServiceTest {
         assertEquals("Ravi Kumar", tenant.name)
         assertEquals("A-101", tenant.flatLabel)
         assertEquals(BigDecimal("5000.00"), tenant.monthlyRent)
+        assertEquals("2026-04", tenant.billingStartMonth)
         assertEquals("9999999999", tenant.phone)
         assertEquals("Shifting this week", tenant.notes)
         assertEquals(listOf("TEN-1"), tenantRepo.getActiveTenants().map { it.id })
@@ -51,29 +53,44 @@ class TenantOnboardingServiceTest {
         val balanceRepo = InMemoryBalanceRepo()
         val onboardingService = TenantOnboardingService(tenantRepo, balanceRepo, FixedIdGenerator("TEN-2"))
         val billingService = BillingMonthService(tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
+        val dashboardService = DashboardQueryService(chargeRepo, InMemoryPaymentRepo(), tenantRepo)
 
         onboardingService.createTenant(
             CreateTenantOnboardingInput(
                 name = "Aman",
                 flatLabel = "A-101",
                 monthlyRent = BigDecimal("5000.00"),
-                billingStartMonth = "2026-04",
+                billingStartMonth = "2026-03",
                 initialDue = BigDecimal("750.00"),
             )
         )
 
-        val openingBalance = balanceRepo.getBalance("TEN-2", "2026-03")
+        val openingBalance = balanceRepo.getBalance("TEN-2", "2026-02")
         assertNotNull(openingBalance)
         assertEquals(BigDecimal("-750.00"), openingBalance.balanceAmount)
 
-        billingService.createBillingMonth("2026-04")
-        billingService.setElectricityRate("2026-04", BigDecimal("8.00"))
-        billingService.upsertFlatUsage("2026-04", "A-101", BigDecimal("10"))
-        billingService.computeMonthCharges("2026-04")
+        billingService.createBillingMonth("2026-02")
+        billingService.setElectricityRate("2026-02", BigDecimal("8.00"))
+        billingService.upsertFlatUsage("2026-02", "A-101", BigDecimal("10"))
+        billingService.computeMonthCharges("2026-02")
+        assertEquals(emptyList(), chargeRepo.getChargesByMonth("2026-02"))
 
-        val aprilCharge = chargeRepo.getChargesByMonth("2026-04").single()
-        assertEquals(BigDecimal("-750.00"), aprilCharge.adjustmentAmount)
-        assertEquals(BigDecimal("5830.00"), aprilCharge.totalDue)
+        billingService.createBillingMonth("2026-03")
+        billingService.setElectricityRate("2026-03", BigDecimal("8.00"))
+        billingService.upsertFlatUsage("2026-03", "A-101", BigDecimal("10"))
+        billingService.computeMonthCharges("2026-03")
+
+        val marchCharge = chargeRepo.getChargesByMonth("2026-03").single()
+        assertEquals(BigDecimal("-750.00"), marchCharge.adjustmentAmount)
+        assertEquals(BigDecimal("5830.00"), marchCharge.totalDue)
+
+        val summary = dashboardService.getOverallSummary()
+        val row = summary.tenantRows.single()
+        assertEquals(BigDecimal("5830.00"), row.totalBilled)
+        assertEquals(BigDecimal("5830.00"), row.balance)
+
+        val history = dashboardService.getTenantHistory("TEN-2")
+        assertEquals(BigDecimal("5830.00"), history.totalDue)
     }
 
     @Test
@@ -98,7 +115,7 @@ class TenantOnboardingServiceTest {
     @Test
     fun `active flat label cannot have two active tenants`() {
         val tenantRepo = InMemoryTenantRepo(
-            mutableListOf(Tenant("T1", "Existing", "A-101", BigDecimal("5000.00")))
+            mutableListOf(Tenant("T1", "Existing", "A-101", BigDecimal("5000.00"), "2026-01"))
         )
         val service = TenantOnboardingService(tenantRepo, InMemoryBalanceRepo(), FixedIdGenerator("TEN-4"))
 

@@ -145,4 +145,41 @@ object Migrations {
             db.execSQL("DROP TABLE IF EXISTS `flats`")
         }
     }
+
+    val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `tenants_new` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `flat_label` TEXT NOT NULL,
+                    `monthly_rent` TEXT NOT NULL,
+                    `billing_start_month` TEXT NOT NULL,
+                    `phone` TEXT,
+                    `is_active` INTEGER NOT NULL,
+                    `notes` TEXT,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `tenants_new` (`id`, `name`, `flat_label`, `monthly_rent`, `billing_start_month`, `phone`, `is_active`, `notes`)
+                SELECT `id`,
+                       `name`,
+                       `flat_label`,
+                       `monthly_rent`,
+                       '0001-01',
+                       `phone`,
+                       `is_active`,
+                       `notes`
+                FROM `tenants`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `tenants`")
+            db.execSQL("ALTER TABLE `tenants_new` RENAME TO `tenants`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_tenants_flat_label` ON `tenants` (`flat_label`)")
+        }
+    }
 }

@@ -21,11 +21,17 @@ class DashboardQueryService(
         val charges = chargeRepo.getAllCharges()
         val payments = paymentRepo.getAllPayments()
         val tenantsById = tenantRepo.getActiveTenants().associateBy { it.id }
+        val initialAdjustmentByTenant = charges
+            .groupBy { it.tenantId }
+            .mapValues { (_, tenantCharges) ->
+                tenantCharges.minByOrNull { it.billingMonthId }?.adjustmentAmount ?: BigDecimal.ZERO
+            }
 
         val billedByTenant = charges.groupBy { it.tenantId }.mapValues { (_, tenantCharges) ->
-            tenantCharges.fold(BigDecimal.ZERO) { acc, charge ->
+            val baseCharges = tenantCharges.fold(BigDecimal.ZERO) { acc, charge ->
                 acc.add(charge.rentAmount).add(charge.electricityShare)
-            }.scaled()
+            }
+            baseCharges.subtract(initialAdjustmentByTenant[tenantCharges.first().tenantId] ?: BigDecimal.ZERO).scaled()
         }
         val paidByTenant = payments.groupBy { it.tenantId }.mapValues { (_, tenantPayments) ->
             tenantPayments.fold(BigDecimal.ZERO) { acc, payment -> acc.add(payment.amountPaid) }.scaled()
@@ -103,10 +109,20 @@ class DashboardQueryService(
                 amount = charge.rentAmount.scaled(),
             )
         }
+        val adjustmentCharges = charges
+            .filter { it.adjustmentAmount.compareTo(BigDecimal.ZERO) != 0 }
+            .map { charge ->
+                TenantMonthlyAmountRow(
+                    tenantId = charge.tenantId,
+                    billingMonthId = charge.billingMonthId,
+                    amount = charge.adjustmentAmount.scaled(),
+                )
+            }
 
         val totalPayments = paymentRows.fold(BigDecimal.ZERO) { acc, payment -> acc.add(payment.amountPaid) }.scaled()
         val totalRent = rentCharges.fold(BigDecimal.ZERO) { acc, charge -> acc.add(charge.amount) }.scaled()
         val totalElectricity = electricityCharges.fold(BigDecimal.ZERO) { acc, charge -> acc.add(charge.amount) }.scaled()
+        val initialAdjustment = charges.minByOrNull { it.billingMonthId }?.adjustmentAmount ?: BigDecimal.ZERO
 
         return TenantHistoryScreenData(
             tenantId = tenantId,
@@ -114,8 +130,9 @@ class DashboardQueryService(
             payments = paymentRows,
             electricityCharges = electricityCharges,
             rentCharges = rentCharges,
+            adjustments = adjustmentCharges,
             totalPayments = totalPayments,
-            totalDue = totalRent.add(totalElectricity).subtract(totalPayments).scaled(),
+            totalDue = totalRent.add(totalElectricity).subtract(totalPayments).subtract(initialAdjustment).scaled(),
         )
     }
 

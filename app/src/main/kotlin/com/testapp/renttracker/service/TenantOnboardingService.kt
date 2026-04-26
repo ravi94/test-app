@@ -53,6 +53,7 @@ class TenantOnboardingService(
             name = name,
             flatLabel = flatLabel,
             monthlyRent = input.monthlyRent.setScale(2, RoundingMode.HALF_UP),
+            billingStartMonth = input.billingStartMonth,
             phone = input.phone?.trim().orEmpty().ifBlank { null },
             isActive = input.isActive,
             notes = input.notes?.trim().orEmpty().ifBlank { null },

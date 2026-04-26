@@ -273,11 +273,10 @@ private fun OnboardingForm(
                     )
                 }
 
-                OutlinedTextField(
+                MonthYearPickerField(
                     value = state.billingStartMonth,
+                    label = "Billing Start Month",
                     onValueChange = viewModel::setBillingStartMonth,
-                    label = { Text("Billing Start Month (YYYY-MM)") },
-                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 OutlinedTextField(
@@ -530,10 +529,6 @@ private fun PaymentScreen(viewModel: PaymentViewModel) {
             }
         ) {
             Text("Record Payment")
-        }
-
-        Button(onClick = { viewModel.recomputeBalance(monthId) }) {
-            Text("Recompute Balance")
         }
 
         if (state.isLoading) {
@@ -822,6 +817,11 @@ private fun TenantHistoryScreen(history: TenantHistoryScreenData) {
 
         Text("Rent", fontWeight = FontWeight.Bold)
         MonthlyAmountTable(rows = history.rentCharges, amountHeader = "Rent")
+
+        if (history.adjustments.isNotEmpty()) {
+            Text("Adjustments / Initial Due", fontWeight = FontWeight.Bold)
+            MonthlyAmountTable(rows = history.adjustments, amountHeader = "Adjustment")
+        }
 
         Text("Total Payment Made: ${history.totalPayments.money()}", fontWeight = FontWeight.Bold)
         Text("Total Due: ${history.totalDue.money()}", fontWeight = FontWeight.Bold)

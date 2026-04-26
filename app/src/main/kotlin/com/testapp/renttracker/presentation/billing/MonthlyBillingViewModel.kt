@@ -2,6 +2,7 @@ package com.testapp.renttracker.presentation.billing
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.testapp.renttracker.error.ErrorCodes
 import com.testapp.renttracker.error.ValidationError
 import com.testapp.renttracker.model.BillingMonth
 import com.testapp.renttracker.model.BillingMonthStatus
@@ -80,6 +81,7 @@ class MonthlyBillingViewModel(
         val tenant = current.availableTenants.firstOrNull { it.id == current.selectedTenantId } ?: return
 
         execute("Billing updated") {
+            validateBillingMonthForTenant(monthId, tenant)
             ensureMonthExists(monthId)
             billingService.setElectricityRate(monthId, current.electricityRateInput.toBigDecimal())
             billingService.upsertFlatUsage(monthId, tenant.flatLabel, current.selectedTenantUnitsInput.toBigDecimal())
@@ -127,6 +129,26 @@ class MonthlyBillingViewModel(
                 )
             )
         }
+    }
+
+    private fun validateBillingMonthForTenant(monthId: String, tenant: Tenant) {
+        val selectedMonth = parseMonth(monthId)
+        val startMonth = parseMonth(tenant.billingStartMonth)
+        if (selectedMonth != null && startMonth != null && selectedMonth < startMonth) {
+            throw ValidationError(
+                ErrorCodes.BILLING_BEFORE_START_MONTH,
+                "Cannot add billing for ${tenant.name} before ${tenant.billingStartMonth}",
+                "monthId",
+            )
+        }
+    }
+
+    private fun parseMonth(monthId: String): Int? {
+        val parts = monthId.split("-")
+        if (parts.size != 2) return null
+        val year = parts[0].toIntOrNull() ?: return null
+        val month = parts[1].toIntOrNull() ?: return null
+        return year * 100 + month
     }
 
     private fun execute(successMessage: String, block: () -> Unit) {

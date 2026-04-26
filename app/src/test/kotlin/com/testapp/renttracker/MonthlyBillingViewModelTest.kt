@@ -1,5 +1,6 @@
 package com.testapp.renttracker
 
+import com.testapp.renttracker.error.ErrorCodes
 import com.testapp.renttracker.model.Tenant
 import com.testapp.renttracker.presentation.billing.MonthlyBillingViewModel
 import com.testapp.renttracker.service.BillingMonthService
@@ -13,8 +14,8 @@ class MonthlyBillingViewModelTest {
     fun `billing view model loads tenants and updates selected tenant`() {
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00")),
-                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00")),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01"),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01"),
             )
         )
         val monthRepo = InMemoryBillingMonthRepo()
@@ -37,8 +38,8 @@ class MonthlyBillingViewModelTest {
     fun `save billing entry creates month saves usage and recomputes month`() {
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00")),
-                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00")),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01"),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01"),
             )
         )
         val monthRepo = InMemoryBillingMonthRepo()
@@ -73,6 +74,36 @@ class MonthlyBillingViewModelTest {
 
         val updatedUsage = usageRepo.getUsageByMonth("2026-04").associateBy { it.flatLabel }
         assertEquals(BigDecimal("12.00"), updatedUsage.getValue("A-101").unitsConsumed)
+    }
+
+    @Test
+    fun `save billing entry fails before tenant billing start month`() {
+        val tenantRepo = InMemoryTenantRepo(
+            mutableListOf(
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-04"),
+            )
+        )
+        val monthRepo = InMemoryBillingMonthRepo()
+        val usageRepo = InMemoryFlatUsageRepo()
+        val chargeRepo = InMemoryChargeRepo()
+        val balanceRepo = InMemoryBalanceRepo()
+        val service = BillingMonthService(tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
+
+        val viewModel = MonthlyBillingViewModel(service, tenantRepo, monthRepo, usageRepo)
+        viewModel.setMonth("2026-03")
+        viewModel.setSelectedTenant("T1")
+        viewModel.setElectricityRateInput("8.00")
+        viewModel.setSelectedTenantUnitsInput("10")
+        viewModel.saveBillingEntry()
+
+        waitFor { viewModel.state.value.error != null }
+
+        assertEquals(
+            "${ErrorCodes.BILLING_BEFORE_START_MONTH}: Cannot add billing for Ravi before 2026-04",
+            viewModel.state.value.error,
+        )
+        assertEquals(emptyList(), usageRepo.getUsageByMonth("2026-03"))
+        assertEquals(emptyList(), chargeRepo.getChargesByMonth("2026-03"))
     }
 
     private fun waitFor(condition: () -> Boolean) {

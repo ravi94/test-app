@@ -62,6 +62,7 @@ data class TenantHistoryScreenData(
     val payments: List<TenantPaymentHistoryRow>,
     val electricityCharges: List<TenantMonthlyAmountRow>,
     val rentCharges: List<TenantMonthlyAmountRow>,
+    val adjustments: List<TenantMonthlyAmountRow>,
     val totalPayments: BigDecimal,
     val totalDue: BigDecimal,
 )

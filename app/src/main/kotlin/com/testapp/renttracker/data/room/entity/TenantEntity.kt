@@ -15,6 +15,7 @@ data class TenantEntity(
     @ColumnInfo(name = "name") val name: String,
     @ColumnInfo(name = "flat_label") val flatLabel: String,
     @ColumnInfo(name = "monthly_rent") val monthlyRent: BigDecimal,
+    @ColumnInfo(name = "billing_start_month") val billingStartMonth: String,
     @ColumnInfo(name = "phone") val phone: String?,
     @ColumnInfo(name = "is_active") val isActive: Boolean,
     @ColumnInfo(name = "notes") val notes: String?,

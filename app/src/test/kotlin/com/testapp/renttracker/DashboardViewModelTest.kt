@@ -38,7 +38,7 @@ class DashboardViewModelTest {
 
     @Test
     fun `open tenant history loads detail and close returns to summary`() {
-        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"))))
+        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01")))
         val monthRepo = InMemoryBillingMonthRepo()
         val usageRepo = InMemoryFlatUsageRepo()
         val chargeRepo = InMemoryChargeRepo()
@@ -91,8 +91,8 @@ class DashboardViewModelTest {
     fun `delete tenant refreshes dashboard tenant list`() {
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00")),
-                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00")),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01"),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01"),
             )
         )
         val chargeRepo = InMemoryChargeRepo()
