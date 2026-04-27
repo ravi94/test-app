@@ -12,6 +12,7 @@ class TenantOnboardingViewModelTest {
         val service = TenantOnboardingService(
             tenantRepo = InMemoryTenantRepo(),
             balanceRepo = InMemoryBalanceRepo(),
+            usageRepo = InMemoryFlatUsageRepo(),
             idGenerator = ViewModelFixedIdGenerator("TEN-1"),
         )
         val viewModel = TenantOnboardingViewModel(service)
@@ -19,6 +20,7 @@ class TenantOnboardingViewModelTest {
         viewModel.setName("Ravi")
         viewModel.setFlatLabel("A-101")
         viewModel.setMonthlyRent("abc")
+        viewModel.setInitialMeterReading("0.00")
         viewModel.setBillingStartMonth("2026-04")
         viewModel.setInitialDue("0.00")
         viewModel.submit()
@@ -31,6 +33,7 @@ class TenantOnboardingViewModelTest {
         val service = TenantOnboardingService(
             tenantRepo = InMemoryTenantRepo(),
             balanceRepo = InMemoryBalanceRepo(),
+            usageRepo = InMemoryFlatUsageRepo(),
             idGenerator = ViewModelFixedIdGenerator("TEN-2"),
         )
         val viewModel = TenantOnboardingViewModel(service)
@@ -39,6 +42,7 @@ class TenantOnboardingViewModelTest {
         viewModel.setPhone("8888888888")
         viewModel.setFlatLabel("A-102")
         viewModel.setMonthlyRent("6000.00")
+        viewModel.setInitialMeterReading("320.25")
         viewModel.setNotes("New joiner")
         viewModel.setBillingStartMonth("2026-05")
         viewModel.setInitialDue("450.50")
@@ -52,6 +56,7 @@ class TenantOnboardingViewModelTest {
         assertEquals("", state.phone)
         assertEquals("", state.flatLabel)
         assertEquals("", state.monthlyRent)
+        assertEquals("0.00", state.initialMeterReading)
         assertEquals("", state.notes)
         assertEquals("0.00", state.initialDue)
     }

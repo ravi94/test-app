@@ -19,13 +19,15 @@ class TenantOnboardingServiceTest {
     fun `creating tenant persists profile and seeds no balance when initial due is zero`() {
         val tenantRepo = InMemoryTenantRepo()
         val balanceRepo = InMemoryBalanceRepo()
-        val service = TenantOnboardingService(tenantRepo, balanceRepo, FixedIdGenerator("TEN-1"))
+        val usageRepo = InMemoryFlatUsageRepo()
+        val service = TenantOnboardingService(tenantRepo, balanceRepo, usageRepo, FixedIdGenerator("TEN-1"))
 
         val tenant = service.createTenant(
             CreateTenantOnboardingInput(
                 name = "Ravi Kumar",
                 flatLabel = "A-101",
                 monthlyRent = BigDecimal("5000.00"),
+                initialMeterReading = BigDecimal("120.00"),
                 phone = "9999999999",
                 notes = "Shifting this week",
                 billingStartMonth = "2026-04",
@@ -38,9 +40,11 @@ class TenantOnboardingServiceTest {
         assertEquals("A-101", tenant.flatLabel)
         assertEquals(BigDecimal("5000.00"), tenant.monthlyRent)
         assertEquals("2026-04", tenant.billingStartMonth)
+        assertEquals(BigDecimal("120.00"), tenant.initialMeterReading)
         assertEquals("9999999999", tenant.phone)
         assertEquals("Shifting this week", tenant.notes)
         assertEquals(listOf("TEN-1"), tenantRepo.getActiveTenants().map { it.id })
+        assertEquals(BigDecimal("120.00"), usageRepo.getUsage("A-101", "2026-04")?.meterReading)
         assertNull(balanceRepo.getBalance("TEN-1", "2026-03"))
     }
 
@@ -51,7 +55,7 @@ class TenantOnboardingServiceTest {
         val usageRepo = InMemoryFlatUsageRepo()
         val chargeRepo = InMemoryChargeRepo()
         val balanceRepo = InMemoryBalanceRepo()
-        val onboardingService = TenantOnboardingService(tenantRepo, balanceRepo, FixedIdGenerator("TEN-2"))
+        val onboardingService = TenantOnboardingService(tenantRepo, balanceRepo, usageRepo, FixedIdGenerator("TEN-2"))
         val billingService = BillingMonthService(tenantRepo, monthRepo, usageRepo, chargeRepo, balanceRepo)
         val dashboardService = DashboardQueryService(chargeRepo, InMemoryPaymentRepo(), tenantRepo)
 
@@ -60,6 +64,7 @@ class TenantOnboardingServiceTest {
                 name = "Aman",
                 flatLabel = "A-101",
                 monthlyRent = BigDecimal("5000.00"),
+                initialMeterReading = BigDecimal("100.00"),
                 billingStartMonth = "2026-03",
                 initialDue = BigDecimal("750.00"),
             )
@@ -71,13 +76,12 @@ class TenantOnboardingServiceTest {
 
         billingService.createBillingMonth("2026-02")
         billingService.setElectricityRate("2026-02", BigDecimal("8.00"))
-        billingService.upsertFlatUsage("2026-02", "A-101", BigDecimal("10"))
         billingService.computeMonthCharges("2026-02")
         assertEquals(emptyList(), chargeRepo.getChargesByMonth("2026-02"))
 
         billingService.createBillingMonth("2026-03")
         billingService.setElectricityRate("2026-03", BigDecimal("8.00"))
-        billingService.upsertFlatUsage("2026-03", "A-101", BigDecimal("10"))
+        billingService.upsertFlatUsage("2026-03", tenantRepo.getActiveTenants().single(), BigDecimal("110"))
         billingService.computeMonthCharges("2026-03")
 
         val marchCharge = chargeRepo.getChargesByMonth("2026-03").single()
@@ -95,7 +99,7 @@ class TenantOnboardingServiceTest {
 
     @Test
     fun `monthly rent must be positive`() {
-        val service = TenantOnboardingService(InMemoryTenantRepo(), InMemoryBalanceRepo(), FixedIdGenerator("TEN-3"))
+        val service = TenantOnboardingService(InMemoryTenantRepo(), InMemoryBalanceRepo(), InMemoryFlatUsageRepo(), FixedIdGenerator("TEN-3"))
 
         val error = assertFailsWith<ValidationError> {
             service.createTenant(
@@ -103,6 +107,7 @@ class TenantOnboardingServiceTest {
                     name = "Ravi",
                     flatLabel = "A-101",
                     monthlyRent = BigDecimal.ZERO,
+                    initialMeterReading = BigDecimal.ZERO,
                     billingStartMonth = "2026-04",
                     initialDue = BigDecimal.ZERO,
                 )
@@ -115,9 +120,9 @@ class TenantOnboardingServiceTest {
     @Test
     fun `active flat label cannot have two active tenants`() {
         val tenantRepo = InMemoryTenantRepo(
-            mutableListOf(Tenant("T1", "Existing", "A-101", BigDecimal("5000.00"), "2026-01"))
+            mutableListOf(Tenant("T1", "Existing", "A-101", BigDecimal("5000.00"), "2026-01", BigDecimal("0.00")))
         )
-        val service = TenantOnboardingService(tenantRepo, InMemoryBalanceRepo(), FixedIdGenerator("TEN-4"))
+        val service = TenantOnboardingService(tenantRepo, InMemoryBalanceRepo(), InMemoryFlatUsageRepo(), FixedIdGenerator("TEN-4"))
 
         val error = assertFailsWith<ValidationError> {
             service.createTenant(
@@ -125,6 +130,7 @@ class TenantOnboardingServiceTest {
                     name = "New Tenant",
                     flatLabel = "A-101",
                     monthlyRent = BigDecimal("5000.00"),
+                    initialMeterReading = BigDecimal.ZERO,
                     billingStartMonth = "2026-04",
                     initialDue = BigDecimal.ZERO,
                 )

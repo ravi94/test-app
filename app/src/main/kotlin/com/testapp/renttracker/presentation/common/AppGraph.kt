@@ -54,6 +54,7 @@ class AppGraph(
     private val tenantOnboardingService = TenantOnboardingService(
         tenantRepo = tenantRepo,
         balanceRepo = balanceRepo,
+        usageRepo = usageRepo,
         idGenerator = idGenerator,
     )
     private val tenantManagementService = TenantManagementService(
@@ -102,6 +103,7 @@ class AppGraph(
                         flatLabel = "A-101",
                         monthlyRent = BigDecimal("5000.00"),
                         billingStartMonth = "2026-02",
+                        initialMeterReading = BigDecimal("0.00"),
                         phone = null,
                         isActive = true,
                         notes = "Demo tenant",
@@ -114,6 +116,7 @@ class AppGraph(
                         flatLabel = "A-102",
                         monthlyRent = BigDecimal("6000.00"),
                         billingStartMonth = "2026-02",
+                        initialMeterReading = BigDecimal("0.00"),
                         phone = null,
                         isActive = true,
                         notes = "Demo tenant",

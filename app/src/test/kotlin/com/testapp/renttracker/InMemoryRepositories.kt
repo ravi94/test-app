@@ -41,6 +41,8 @@ class InMemoryFlatUsageRepo : FlatUsageRepository {
     }
 
     override fun getUsageByMonth(monthId: String): List<FlatUsage> = map.values.filter { it.billingMonthId == monthId }
+
+    override fun getUsage(flatLabel: String, monthId: String): FlatUsage? = map[flatLabel to monthId]
 }
 
 class InMemoryChargeRepo : TenantMonthlyChargeRepository {

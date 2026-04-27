@@ -38,7 +38,7 @@ class DashboardViewModelTest {
 
     @Test
     fun `open tenant history loads detail and close returns to summary`() {
-        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01")))
+        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-02", BigDecimal("0.00"))))
         val monthRepo = InMemoryBillingMonthRepo()
         val usageRepo = InMemoryFlatUsageRepo()
         val chargeRepo = InMemoryChargeRepo()
@@ -53,7 +53,7 @@ class DashboardViewModelTest {
 
         billingService.createBillingMonth("2026-02")
         billingService.setElectricityRate("2026-02", BigDecimal("8.00"))
-        billingService.upsertFlatUsage("2026-02", "A-101", BigDecimal("10"))
+        billingService.upsertFlatUsage("2026-02", tenantRepo.getActiveTenants().single(), BigDecimal("10"))
         billingService.computeMonthCharges("2026-02")
         paymentService.recordPayment(
             RecordPaymentInput(
@@ -91,8 +91,8 @@ class DashboardViewModelTest {
     fun `delete tenant refreshes dashboard tenant list`() {
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01"),
-                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01"),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01", BigDecimal("0.00")),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01", BigDecimal("0.00")),
             )
         )
         val chargeRepo = InMemoryChargeRepo()

@@ -3,9 +3,11 @@ package com.testapp.renttracker.service
 import com.testapp.renttracker.error.ErrorCodes
 import com.testapp.renttracker.error.ValidationError
 import com.testapp.renttracker.model.CreateTenantOnboardingInput
+import com.testapp.renttracker.model.FlatUsage
 import com.testapp.renttracker.model.Tenant
 import com.testapp.renttracker.model.TenantBalance
 import com.testapp.renttracker.repo.IdGenerator
+import com.testapp.renttracker.repo.FlatUsageRepository
 import com.testapp.renttracker.repo.TenantBalanceRepository
 import com.testapp.renttracker.repo.TenantRepository
 import java.math.BigDecimal
@@ -14,6 +16,7 @@ import java.math.RoundingMode
 class TenantOnboardingService(
     private val tenantRepo: TenantRepository,
     private val balanceRepo: TenantBalanceRepository,
+    private val usageRepo: FlatUsageRepository,
     private val idGenerator: IdGenerator,
 ) {
     fun createTenant(input: CreateTenantOnboardingInput): Tenant {
@@ -38,6 +41,13 @@ class TenantOnboardingService(
         if (input.initialDue < BigDecimal.ZERO) {
             throw ValidationError(ErrorCodes.INVALID_AMOUNT, "Initial due must be non-negative", "initialDue")
         }
+        if (input.initialMeterReading < BigDecimal.ZERO) {
+            throw ValidationError(
+                ErrorCodes.INVALID_METER_READING,
+                "Initial meter reading must be non-negative",
+                "initialMeterReading",
+            )
+        }
 
         val activeTenantOnFlat = tenantRepo.getActiveTenantByFlatLabel(flatLabel)
         if (input.isActive && activeTenantOnFlat != null) {
@@ -54,11 +64,20 @@ class TenantOnboardingService(
             flatLabel = flatLabel,
             monthlyRent = input.monthlyRent.setScale(2, RoundingMode.HALF_UP),
             billingStartMonth = input.billingStartMonth,
+            initialMeterReading = input.initialMeterReading.setScale(2, RoundingMode.HALF_UP),
             phone = input.phone?.trim().orEmpty().ifBlank { null },
             isActive = input.isActive,
             notes = input.notes?.trim().orEmpty().ifBlank { null },
         )
         tenantRepo.upsertTenant(tenant)
+
+        usageRepo.upsertUsage(
+            FlatUsage(
+                flatLabel = flatLabel,
+                billingMonthId = input.billingStartMonth,
+                meterReading = tenant.initialMeterReading,
+            )
+        )
 
         val initialDue = input.initialDue.setScale(2, RoundingMode.HALF_UP)
         if (initialDue > BigDecimal.ZERO) {

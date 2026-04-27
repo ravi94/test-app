@@ -182,4 +182,66 @@ object Migrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS `idx_tenants_flat_label` ON `tenants` (`flat_label`)")
         }
     }
+
+    val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `tenants_new` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `flat_label` TEXT NOT NULL,
+                    `monthly_rent` TEXT NOT NULL,
+                    `billing_start_month` TEXT NOT NULL,
+                    `initial_meter_reading` TEXT NOT NULL,
+                    `phone` TEXT,
+                    `is_active` INTEGER NOT NULL,
+                    `notes` TEXT,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `tenants_new` (`id`, `name`, `flat_label`, `monthly_rent`, `billing_start_month`, `initial_meter_reading`, `phone`, `is_active`, `notes`)
+                SELECT `id`,
+                       `name`,
+                       `flat_label`,
+                       `monthly_rent`,
+                       `billing_start_month`,
+                       '0.00',
+                       `phone`,
+                       `is_active`,
+                       `notes`
+                FROM `tenants`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `tenants`")
+            db.execSQL("ALTER TABLE `tenants_new` RENAME TO `tenants`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `idx_tenants_flat_label` ON `tenants` (`flat_label`)")
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `flat_usage_new` (
+                    `flat_label` TEXT NOT NULL,
+                    `billing_month_id` TEXT NOT NULL,
+                    `meter_reading` TEXT NOT NULL,
+                    PRIMARY KEY(`flat_label`, `billing_month_id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `flat_usage_new` (`flat_label`, `billing_month_id`, `meter_reading`)
+                SELECT `flat_label`,
+                       `billing_month_id`,
+                       `units_consumed`
+                FROM `flat_usage`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `flat_usage`")
+            db.execSQL("ALTER TABLE `flat_usage_new` RENAME TO `flat_usage`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_flat_usage_billing_month_id` ON `flat_usage` (`billing_month_id`)")
+        }
+    }
 }

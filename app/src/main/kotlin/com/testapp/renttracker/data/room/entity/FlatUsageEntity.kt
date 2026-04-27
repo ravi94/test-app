@@ -13,5 +13,5 @@ import java.math.BigDecimal
 data class FlatUsageEntity(
     @ColumnInfo(name = "flat_label") val flatLabel: String,
     @ColumnInfo(name = "billing_month_id") val billingMonthId: String,
-    @ColumnInfo(name = "units_consumed") val unitsConsumed: BigDecimal,
+    @ColumnInfo(name = "meter_reading") val meterReading: BigDecimal,
 )

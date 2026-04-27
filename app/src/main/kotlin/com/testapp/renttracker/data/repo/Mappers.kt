@@ -20,6 +20,7 @@ internal fun TenantEntity.toDomain(): Tenant =
         flatLabel = flatLabel,
         monthlyRent = monthlyRent,
         billingStartMonth = billingStartMonth,
+        initialMeterReading = initialMeterReading,
         phone = phone,
         isActive = isActive,
         notes = notes,
@@ -32,6 +33,7 @@ internal fun Tenant.toEntity(): TenantEntity =
         flatLabel = flatLabel,
         monthlyRent = monthlyRent,
         billingStartMonth = billingStartMonth,
+        initialMeterReading = initialMeterReading,
         phone = phone,
         isActive = isActive,
         notes = notes,
@@ -44,10 +46,10 @@ internal fun BillingMonth.toEntity(): BillingMonthEntity =
     BillingMonthEntity(id = id, electricityRatePerUnit = electricityRatePerUnit, status = status)
 
 internal fun FlatUsageEntity.toDomain(): FlatUsage =
-    FlatUsage(flatLabel = flatLabel, billingMonthId = billingMonthId, unitsConsumed = unitsConsumed)
+    FlatUsage(flatLabel = flatLabel, billingMonthId = billingMonthId, meterReading = meterReading)
 
 internal fun FlatUsage.toEntity(): FlatUsageEntity =
-    FlatUsageEntity(flatLabel = flatLabel, billingMonthId = billingMonthId, unitsConsumed = unitsConsumed)
+    FlatUsageEntity(flatLabel = flatLabel, billingMonthId = billingMonthId, meterReading = meterReading)
 
 internal fun TenantMonthlyChargeEntity.toDomain(): TenantMonthlyCharge =
     TenantMonthlyCharge(

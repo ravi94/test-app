@@ -2,19 +2,28 @@ package com.testapp.renttracker.logic
 
 import com.testapp.renttracker.error.ErrorCodes
 import com.testapp.renttracker.error.ValidationError
-import com.testapp.renttracker.model.FlatUsage
 import java.math.BigDecimal
 import java.math.RoundingMode
 
 object BillingCalculator {
     private val ZERO = BigDecimal.ZERO
 
+    fun computeUnitsConsumed(currentReading: BigDecimal, previousReading: BigDecimal): BigDecimal {
+        val units = currentReading.subtract(previousReading)
+        if (units < ZERO) {
+            throw ValidationError(
+                code = ErrorCodes.INVALID_METER_READING,
+                message = "Current meter reading must be greater than or equal to previous meter reading ($previousReading)",
+                field = "currentMeterReading",
+            )
+        }
+        return units.setScale(2, RoundingMode.HALF_UP)
+    }
+
     fun computeElectricityChargeByFlatLabel(
-        flatLabels: List<String>,
-        usages: List<FlatUsage>,
+        unitsByFlat: Map<String, BigDecimal>,
         ratePerUnit: BigDecimal,
     ): Map<String, BigDecimal> {
-        val usageByFlat = usages.associateBy { it.flatLabel }
         if (ratePerUnit < ZERO) {
             throw ValidationError(
                 code = ErrorCodes.INVALID_AMOUNT,
@@ -23,8 +32,7 @@ object BillingCalculator {
             )
         }
 
-        return flatLabels.associateWith { flatLabel ->
-            val units = usageByFlat[flatLabel]?.unitsConsumed ?: ZERO
+        return unitsByFlat.mapValues { (_, units) ->
             val charge = units.multiply(ratePerUnit).setScale(2, RoundingMode.HALF_UP)
             charge
         }

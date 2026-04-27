@@ -46,8 +46,8 @@ class ServicesFlowTest {
     fun `full cycle computes carry-forward and overall tenant summary`() {
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01"),
-                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01"),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-02", BigDecimal("0.00")),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-02", BigDecimal("0.00")),
             )
         )
         val monthRepo = InMemoryBillingMonthRepo()
@@ -62,8 +62,8 @@ class ServicesFlowTest {
 
         billingService.createBillingMonth("2026-02")
         billingService.setElectricityRate("2026-02", BigDecimal("8.00"))
-        billingService.upsertFlatUsage("2026-02", "A-101", BigDecimal("10"))
-        billingService.upsertFlatUsage("2026-02", "A-102", BigDecimal("20"))
+        billingService.upsertFlatUsage("2026-02", tenantRepo.getActiveTenants().first { it.id == "T1" }, BigDecimal("10"))
+        billingService.upsertFlatUsage("2026-02", tenantRepo.getActiveTenants().first { it.id == "T2" }, BigDecimal("20"))
         billingService.computeMonthCharges("2026-02")
 
         val febCharges = chargeRepo.getChargesByMonth("2026-02").associateBy { it.tenantId }
@@ -86,45 +86,45 @@ class ServicesFlowTest {
 
         billingService.createBillingMonth("2026-03")
         billingService.setElectricityRate("2026-03", BigDecimal("8.00"))
-        billingService.upsertFlatUsage("2026-03", "A-101", BigDecimal("20"))
-        billingService.upsertFlatUsage("2026-03", "A-102", BigDecimal("40"))
+        billingService.upsertFlatUsage("2026-03", tenantRepo.getActiveTenants().first { it.id == "T1" }, BigDecimal("20"))
+        billingService.upsertFlatUsage("2026-03", tenantRepo.getActiveTenants().first { it.id == "T2" }, BigDecimal("40"))
         billingService.computeMonthCharges("2026-03")
 
         val marCharges = chargeRepo.getChargesByMonth("2026-03").associateBy { it.tenantId }
         assertMonthCharge(
             marCharges.getValue("T1"),
             rent = "5000.00",
-            electricity = "160.00",
+            electricity = "80.00",
             adjustment = "-1080.00",
-            totalDue = "6240.00",
+            totalDue = "6160.00",
         )
         assertMonthCharge(
             marCharges.getValue("T2"),
             rent = "6000.00",
-            electricity = "320.00",
+            electricity = "160.00",
             adjustment = "-6160.00",
-            totalDue = "12480.00",
+            totalDue = "12320.00",
         )
 
         val summary = dashboard.getOverallSummary()
-        assertEquals(BigDecimal("22720.00"), summary.totalBilled)
+        assertEquals(BigDecimal("22480.00"), summary.totalBilled)
         assertEquals(BigDecimal("4000.00"), summary.totalPaid)
-        assertEquals(BigDecimal("18720.00"), summary.totalBalance)
+        assertEquals(BigDecimal("18480.00"), summary.totalBalance)
 
         val rows = summary.tenantRows.associateBy { it.tenantId }
-        assertEquals(BigDecimal("10240.00"), rows.getValue("T1").totalBilled)
+        assertEquals(BigDecimal("10160.00"), rows.getValue("T1").totalBilled)
         assertEquals(BigDecimal("4000.00"), rows.getValue("T1").totalPaid)
-        assertEquals(BigDecimal("6240.00"), rows.getValue("T1").balance)
+        assertEquals(BigDecimal("6160.00"), rows.getValue("T1").balance)
         assertEquals(PaymentStatus.Partial, rows.getValue("T1").status)
-        assertEquals(BigDecimal("12480.00"), rows.getValue("T2").totalBilled)
+        assertEquals(BigDecimal("12320.00"), rows.getValue("T2").totalBilled)
         assertEquals(BigDecimal("0.00"), rows.getValue("T2").totalPaid)
-        assertEquals(BigDecimal("12480.00"), rows.getValue("T2").balance)
+        assertEquals(BigDecimal("12320.00"), rows.getValue("T2").balance)
         assertEquals(PaymentStatus.Unpaid, rows.getValue("T2").status)
 
         val tenantHistory = dashboard.getTenantHistory("T1")
         assertEquals("Ravi", tenantHistory.tenantName)
         assertEquals(BigDecimal("4000.00"), tenantHistory.totalPayments)
-        assertEquals(BigDecimal("6240.00"), tenantHistory.totalDue)
+        assertEquals(BigDecimal("6160.00"), tenantHistory.totalDue)
         assertEquals(listOf("2026-03", "2026-02"), tenantHistory.rentCharges.map { it.billingMonthId })
         assertEquals(listOf("2026-03", "2026-02"), tenantHistory.electricityCharges.map { it.billingMonthId })
         assertEquals(listOf("2026-03"), tenantHistory.adjustments.map { it.billingMonthId })
@@ -136,7 +136,7 @@ class ServicesFlowTest {
     fun `overall summary marks overpaid tenant as paid`() {
         val chargeRepo = InMemoryChargeRepo()
         val paymentRepo = InMemoryPaymentRepo()
-        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01")))
+        val tenantRepo = InMemoryTenantRepo(mutableListOf(Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-02", BigDecimal("0.00"))))
         val dashboard = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)
 
         chargeRepo.replaceMonthCharges(
@@ -199,8 +199,8 @@ class ServicesFlowTest {
         val paymentRepo = InMemoryPaymentRepo()
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01"),
-                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01"),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01", BigDecimal("0.00")),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01", BigDecimal("0.00")),
             )
         )
         val dashboard = DashboardQueryService(chargeRepo, paymentRepo, tenantRepo)

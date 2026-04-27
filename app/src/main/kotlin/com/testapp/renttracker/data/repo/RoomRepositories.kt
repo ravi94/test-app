@@ -54,6 +54,10 @@ class RoomFlatUsageRepository(private val dao: FlatUsageDao) : FlatUsageReposito
     override fun getUsageByMonth(monthId: String): List<FlatUsage> = runBlocking {
         dao.getByMonth(monthId).map { it.toDomain() }
     }
+
+    override fun getUsage(flatLabel: String, monthId: String): FlatUsage? = runBlocking {
+        dao.getByFlatAndMonth(flatLabel, monthId)?.toDomain()
+    }
 }
 
 class RoomTenantMonthlyChargeRepository(private val dao: TenantMonthlyChargeDao) : TenantMonthlyChargeRepository {

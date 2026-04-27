@@ -9,6 +9,7 @@ data class Tenant(
     val flatLabel: String,
     val monthlyRent: BigDecimal,
     val billingStartMonth: String,
+    val initialMeterReading: BigDecimal,
     val phone: String? = null,
     val isActive: Boolean = true,
     val notes: String? = null,
@@ -23,7 +24,7 @@ data class BillingMonth(
 data class FlatUsage(
     val flatLabel: String,
     val billingMonthId: String,
-    val unitsConsumed: BigDecimal,
+    val meterReading: BigDecimal,
 )
 
 data class TenantMonthlyCharge(

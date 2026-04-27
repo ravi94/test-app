@@ -17,8 +17,8 @@ class TenantManagementServiceTest {
     fun `delete tenant removes tenant and complete related data`() {
         val tenantRepo = InMemoryTenantRepo(
             mutableListOf(
-                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01"),
-                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01"),
+                Tenant("T1", "Ravi", "A-101", BigDecimal("5000.00"), "2026-01", BigDecimal("0.00")),
+                Tenant("T2", "Aman", "A-102", BigDecimal("6000.00"), "2026-01", BigDecimal("0.00")),
             )
         )
         val chargeRepo = InMemoryChargeRepo()

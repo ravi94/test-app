@@ -25,6 +25,7 @@ interface BillingMonthRepository {
 interface FlatUsageRepository {
     fun upsertUsage(usage: FlatUsage)
     fun getUsageByMonth(monthId: String): List<FlatUsage>
+    fun getUsage(flatLabel: String, monthId: String): FlatUsage?
 }
 
 interface TenantMonthlyChargeRepository {

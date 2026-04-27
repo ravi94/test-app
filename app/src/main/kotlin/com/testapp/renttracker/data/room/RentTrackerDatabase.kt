@@ -25,7 +25,7 @@ import com.testapp.renttracker.data.room.entity.TenantMonthlyChargeEntity
         TenantBalanceEntity::class,
         PaymentRecordEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

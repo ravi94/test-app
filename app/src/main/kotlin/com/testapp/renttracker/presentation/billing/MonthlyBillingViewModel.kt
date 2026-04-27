@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.LocalDate
 
 class MonthlyBillingViewModel(
     private val billingService: BillingMonthService,
@@ -71,8 +72,8 @@ class MonthlyBillingViewModel(
         _state.update { it.copy(electricityRateInput = ratePerUnit) }
     }
 
-    fun setSelectedTenantUnitsInput(units: String) {
-        _state.update { it.copy(selectedTenantUnitsInput = units) }
+    fun setCurrentMeterReadingInput(reading: String) {
+        _state.update { it.copy(currentMeterReadingInput = reading) }
     }
 
     fun saveBillingEntry() {
@@ -84,7 +85,7 @@ class MonthlyBillingViewModel(
             validateBillingMonthForTenant(monthId, tenant)
             ensureMonthExists(monthId)
             billingService.setElectricityRate(monthId, current.electricityRateInput.toBigDecimal())
-            billingService.upsertFlatUsage(monthId, tenant.flatLabel, current.selectedTenantUnitsInput.toBigDecimal())
+            billingService.upsertFlatUsage(monthId, tenant, current.currentMeterReadingInput.toBigDecimal())
             billingService.computeMonthCharges(monthId)
             refreshFormState()
         }
@@ -107,12 +108,23 @@ class MonthlyBillingViewModel(
         val monthId = current.monthId ?: return
         val tenant = current.availableTenants.firstOrNull { it.id == current.selectedTenantId }
         val month = monthRepo.getMonth(monthId)
-        val usageByFlat = usageRepo.getUsageByMonth(monthId).associateBy { it.flatLabel }
-        val unitsForTenant = tenant?.let { usageByFlat[it.flatLabel]?.unitsConsumed?.formatAmount() }.orEmpty()
+        val currentReadingForTenant = tenant?.let { usageRepo.getUsage(it.flatLabel, monthId)?.meterReading?.formatAmount() }.orEmpty()
+        val previousReadingForTenant = tenant?.let { resolvePreviousMeterReading(it, monthId) }
+        val computedUnits = runCatching {
+            val currentReading = currentReadingForTenant.toBigDecimalOrNull()
+            val previousReading = previousReadingForTenant?.toBigDecimalOrNull()
+            if (currentReading != null && previousReading != null) {
+                currentReading.subtract(previousReading).setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+            } else {
+                ""
+            }
+        }.getOrDefault("")
 
         _state.update {
             it.copy(
-                selectedTenantUnitsInput = unitsForTenant,
+                currentMeterReadingInput = currentReadingForTenant,
+                previousMeterReading = previousReadingForTenant.orEmpty(),
+                computedUnits = computedUnits,
                 electricityRateInput = month?.electricityRatePerUnit?.formatAmount() ?: it.electricityRateInput,
                 isFinalized = month?.status == BillingMonthStatus.Finalized,
             )
@@ -151,6 +163,30 @@ class MonthlyBillingViewModel(
         return year * 100 + month
     }
 
+    private fun resolvePreviousMeterReading(tenant: Tenant, monthId: String): String? {
+        val previousMonthId = previousMonth(monthId) ?: return tenant.initialMeterReading.formatAmount()
+        val previousUsage = usageRepo.getUsage(tenant.flatLabel, previousMonthId)
+        if (previousUsage != null) {
+            return previousUsage.meterReading.formatAmount()
+        }
+        if (monthId == tenant.billingStartMonth) {
+            return tenant.initialMeterReading.formatAmount()
+        }
+        return null
+    }
+
+    private fun previousMonth(monthId: String): String? {
+        val parts = monthId.split("-")
+        if (parts.size != 2) return null
+        val year = parts[0].toIntOrNull() ?: return null
+        val month = parts[1].toIntOrNull() ?: return null
+        return if (month == 1) {
+            "${year - 1}-12"
+        } else {
+            "%04d-%02d".format(year, month - 1)
+        }
+    }
+
     private fun execute(successMessage: String, block: () -> Unit) {
         _state.update { it.copy(isLoading = true, error = null, message = null) }
         viewModelScope.launch(Dispatchers.IO) {
@@ -169,10 +205,12 @@ class MonthlyBillingViewModel(
 }
 
 data class MonthlyBillingUiState(
-    val monthId: String? = "2026-02",
+    val monthId: String? = currentMonth(),
     val availableTenants: List<Tenant> = emptyList(),
     val selectedTenantId: String = "",
-    val selectedTenantUnitsInput: String = "",
+    val previousMeterReading: String = "",
+    val currentMeterReadingInput: String = "",
+    val computedUnits: String = "",
     val electricityRateInput: String = "",
     val computedCharges: List<TenantMonthlyCharge> = emptyList(),
     val isFinalized: Boolean = false,
@@ -180,3 +218,8 @@ data class MonthlyBillingUiState(
     val message: String? = null,
     val error: String? = null,
 )
+
+private fun currentMonth(): String {
+    val today = LocalDate.now()
+    return "%04d-%02d".format(today.year, today.monthValue)
+}

@@ -28,6 +28,7 @@ class TenantOnboardingViewModel(
     fun setPhone(value: String) = _state.update { it.copy(phone = value) }
     fun setFlatLabel(value: String) = _state.update { it.copy(flatLabel = value) }
     fun setMonthlyRent(value: String) = _state.update { it.copy(monthlyRent = value) }
+    fun setInitialMeterReading(value: String) = _state.update { it.copy(initialMeterReading = value) }
     fun setActive(value: Boolean) = _state.update { it.copy(isActive = value) }
     fun setNotes(value: String) = _state.update { it.copy(notes = value) }
     fun setBillingStartMonth(value: String) = _state.update { it.copy(billingStartMonth = value) }
@@ -37,6 +38,7 @@ class TenantOnboardingViewModel(
         val current = _state.value
         val initialDue = current.initialDue.toBigDecimalOrNull()
         val monthlyRent = current.monthlyRent.toBigDecimalOrNull()
+        val initialMeterReading = current.initialMeterReading.toBigDecimalOrNull()
         if (current.initialDue.isBlank()) {
             _state.update { it.copy(error = "REQUIRED_FIELD: Initial due is required", message = null) }
             return
@@ -53,6 +55,14 @@ class TenantOnboardingViewModel(
             _state.update { it.copy(error = "INVALID_AMOUNT: Monthly rent must be a valid number", message = null) }
             return
         }
+        if (current.initialMeterReading.isBlank()) {
+            _state.update { it.copy(error = "REQUIRED_FIELD: Initial meter reading is required", message = null) }
+            return
+        }
+        if (initialMeterReading == null) {
+            _state.update { it.copy(error = "INVALID_METER_READING: Initial meter reading must be a valid number", message = null) }
+            return
+        }
 
         _state.update { it.copy(isLoading = true, error = null, message = null) }
         viewModelScope.launch(Dispatchers.IO) {
@@ -62,6 +72,7 @@ class TenantOnboardingViewModel(
                         name = current.name,
                         flatLabel = current.flatLabel,
                         monthlyRent = monthlyRent,
+                        initialMeterReading = initialMeterReading,
                         phone = current.phone,
                         isActive = current.isActive,
                         notes = current.notes,
@@ -95,6 +106,7 @@ data class TenantOnboardingUiState(
     val phone: String = "",
     val flatLabel: String = "",
     val monthlyRent: String = "",
+    val initialMeterReading: String = "0.00",
     val isActive: Boolean = true,
     val notes: String = "",
     val billingStartMonth: String = "",

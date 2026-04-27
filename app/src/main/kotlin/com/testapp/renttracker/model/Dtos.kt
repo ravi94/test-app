@@ -16,6 +16,7 @@ data class CreateTenantOnboardingInput(
     val name: String,
     val flatLabel: String,
     val monthlyRent: BigDecimal,
+    val initialMeterReading: BigDecimal,
     val phone: String? = null,
     val isActive: Boolean = true,
     val notes: String? = null,

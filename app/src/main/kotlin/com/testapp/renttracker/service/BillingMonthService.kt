@@ -36,13 +36,14 @@ class BillingMonthService(
         monthRepo.updateMonth(month.copy(electricityRatePerUnit = ratePerUnit.setScale(2, RoundingMode.HALF_UP)))
     }
 
-    fun upsertFlatUsage(monthId: String, flatLabel: String, units: BigDecimal) {
-        requireNonNegative(units, "units")
+    fun upsertFlatUsage(monthId: String, tenant: Tenant, meterReading: BigDecimal) {
+        requireNonNegative(meterReading, "currentMeterReading")
+        validateCurrentMeterReading(monthId, tenant, meterReading)
         usageRepo.upsertUsage(
             FlatUsage(
-                flatLabel = flatLabel,
+                flatLabel = tenant.flatLabel,
                 billingMonthId = monthId,
-                unitsConsumed = units.setScale(2, RoundingMode.HALF_UP),
+                meterReading = meterReading.setScale(2, RoundingMode.HALF_UP),
             )
         )
     }
@@ -52,12 +53,14 @@ class BillingMonthService(
         val activeTenants = tenantRepo.getActiveTenants().filter { isMonthOnOrAfter(monthId, it.billingStartMonth) }
         val activeFlatLabels = activeTenants.map { it.flatLabel }.distinct()
 
-        val usage = usageRepo.getUsageByMonth(monthId)
-        val electricityByFlat = BillingCalculator.computeElectricityChargeByFlatLabel(
-            flatLabels = activeFlatLabels,
-            usages = usage,
-            ratePerUnit = month.electricityRatePerUnit,
-        )
+        val currentUsageByFlat = usageRepo.getUsageByMonth(monthId).associateBy { it.flatLabel }
+        val unitsByFlat = activeFlatLabels.associateWith { flatLabel ->
+            val tenant = activeTenants.first { it.flatLabel == flatLabel }
+            val currentReading = currentUsageByFlat[flatLabel]?.meterReading ?: BigDecimal.ZERO
+            val previousReading = resolvePreviousMeterReading(tenant, monthId)
+            BillingCalculator.computeUnitsConsumed(currentReading, previousReading)
+        }
+        val electricityByFlat = BillingCalculator.computeElectricityChargeByFlatLabel(unitsByFlat, month.electricityRatePerUnit)
 
         val charges = activeTenants.map { tenant ->
             if (tenant.flatLabel.isBlank()) {
@@ -113,6 +116,33 @@ class BillingMonthService(
         } else {
             "%04d-%02d".format(year, month - 1)
         }
+    }
+
+    private fun resolvePreviousMeterReading(tenant: Tenant, monthId: String): BigDecimal {
+        val previousMonthId = previousMonth(monthId)
+        if (previousMonthId == null) {
+            return tenant.initialMeterReading.setScale(2, RoundingMode.HALF_UP)
+        }
+        val previousUsage = usageRepo.getUsage(tenant.flatLabel, previousMonthId)
+        if (previousUsage != null) {
+            return previousUsage.meterReading.setScale(2, RoundingMode.HALF_UP)
+        }
+        if (monthId == tenant.billingStartMonth) {
+            return tenant.initialMeterReading.setScale(2, RoundingMode.HALF_UP)
+        }
+        throw ValidationError(
+            ErrorCodes.PREVIOUS_METER_READING_NOT_FOUND,
+            "Previous meter reading not found for flat ${tenant.flatLabel} before $monthId",
+            "monthId",
+        )
+    }
+
+    private fun validateCurrentMeterReading(monthId: String, tenant: Tenant, currentReading: BigDecimal) {
+        val previousReading = resolvePreviousMeterReading(tenant, monthId)
+        BillingCalculator.computeUnitsConsumed(
+            currentReading = currentReading.setScale(2, RoundingMode.HALF_UP),
+            previousReading = previousReading,
+        )
     }
 
     private fun isMonthOnOrAfter(monthId: String, startMonthId: String): Boolean {

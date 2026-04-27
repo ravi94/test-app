@@ -262,6 +262,13 @@ private fun OnboardingForm(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
+                OutlinedTextField(
+                    value = state.initialMeterReading,
+                    onValueChange = viewModel::setInitialMeterReading,
+                    label = { Text("Initial Meter Reading") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -407,7 +414,8 @@ private fun TenantManagementListScreen(
 @Composable
 private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val monthId = state.monthId ?: "2026-02"
+    val today = LocalDate.now()
+    val monthId = state.monthId ?: "%04d-%02d".format(today.year, today.monthValue)
     val selectedTenant = state.availableTenants.firstOrNull { it.id == state.selectedTenantId }
 
     Column(
@@ -439,9 +447,9 @@ private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
         )
 
         OutlinedTextField(
-            value = state.selectedTenantUnitsInput,
-            onValueChange = viewModel::setSelectedTenantUnitsInput,
-            label = { Text("Units") },
+            value = state.currentMeterReadingInput,
+            onValueChange = viewModel::setCurrentMeterReadingInput,
+            label = { Text("Current Meter Reading") },
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -461,8 +469,14 @@ private fun BillingScreen(viewModel: MonthlyBillingViewModel) {
         selectedTenant?.let { tenant ->
             Text("Selected Tenant: ${tenant.name}")
             Text("Flat: ${tenant.flatLabel}")
-            if (state.selectedTenantUnitsInput.isNotBlank()) {
-                Text("Saved Units For $monthId: ${state.selectedTenantUnitsInput}")
+            if (state.previousMeterReading.isNotBlank()) {
+                Text("Previous Reading: ${state.previousMeterReading}")
+            }
+            if (state.currentMeterReadingInput.isNotBlank()) {
+                Text("Current Reading For $monthId: ${state.currentMeterReadingInput}")
+            }
+            if (state.computedUnits.isNotBlank()) {
+                Text("Computed Units: ${state.computedUnits}")
             }
         }
         if (state.error != null) {

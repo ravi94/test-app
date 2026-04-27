@@ -13,4 +13,7 @@ interface FlatUsageDao {
 
     @Query("SELECT * FROM flat_usage WHERE billing_month_id = :monthId")
     suspend fun getByMonth(monthId: String): List<FlatUsageEntity>
+
+    @Query("SELECT * FROM flat_usage WHERE flat_label = :flatLabel AND billing_month_id = :monthId LIMIT 1")
+    suspend fun getByFlatAndMonth(flatLabel: String, monthId: String): FlatUsageEntity?
 }
