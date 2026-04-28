@@ -1,5 +1,15 @@
 package com.testapp.renttracker.ui
 
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import android.net.Uri
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
@@ -19,6 +30,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -31,6 +45,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -48,6 +63,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -637,8 +653,12 @@ private fun DashboardScreen(viewModel: DashboardViewModel) {
                     Text("↻", style = MaterialTheme.typography.titleLarge)
                 }
             } else {
-                TextButton(onClick = { viewModel.closeTenantHistory() }) {
-                    Text("Back")
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TenantHistoryDownloadButton(history = tenantHistory)
+                    TenantHistoryShareButton(history = tenantHistory)
+                    TextButton(onClick = { viewModel.closeTenantHistory() }) {
+                        Text("Back")
+                    }
                 }
             }
         }
@@ -673,6 +693,65 @@ private fun DashboardScreen(viewModel: DashboardViewModel) {
         if (state.error != null) {
             Text(state.error ?: "", color = MaterialTheme.colorScheme.error)
         }
+    }
+}
+
+@Composable
+private fun TenantHistoryDownloadButton(history: TenantHistoryScreenData) {
+    val context = LocalContext.current
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf"),
+    ) { uri ->
+        if (uri == null) {
+            Toast.makeText(context, "PDF export cancelled", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+
+        runCatching { context.exportTenantHistoryPdf(uri, history) }
+            .onSuccess {
+                Toast.makeText(context, "Tenant history PDF saved", Toast.LENGTH_SHORT).show()
+            }
+            .onFailure { error ->
+                Toast.makeText(
+                    context,
+                    error.message ?: "Unable to save tenant history PDF",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+    }
+
+    IconButton(
+        onClick = { exportLauncher.launch(history.pdfFileName()) },
+    ) {
+        Icon(
+            imageVector = Icons.Filled.FileDownload,
+            contentDescription = "Download tenant history PDF",
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+private fun TenantHistoryShareButton(history: TenantHistoryScreenData) {
+    val context = LocalContext.current
+
+    IconButton(
+        onClick = {
+            runCatching { context.shareTenantHistoryPdf(history) }
+                .onFailure { error ->
+                    Toast.makeText(
+                        context,
+                        error.message ?: "Unable to share tenant history PDF",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+        },
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Share,
+            contentDescription = "Share tenant history PDF",
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 
@@ -1030,6 +1109,228 @@ private fun String.toDisplayMonthYear(): String {
 private fun String.toDisplayDate(): String {
     val parsed = runCatching { LocalDate.parse(this) }.getOrNull() ?: return this
     return "${parsed.dayOfMonth} ${parsed.monthValue.monthName()} ${parsed.year}"
+}
+
+private fun Context.exportTenantHistoryPdf(
+    uri: Uri,
+    history: TenantHistoryScreenData,
+) {
+    contentResolver.openOutputStream(uri)?.use { outputStream ->
+        writeTenantHistoryPdf(outputStream, history)
+    } ?: error("Unable to open selected file")
+}
+
+private fun Context.shareTenantHistoryPdf(history: TenantHistoryScreenData) {
+    val shareDir = java.io.File(cacheDir, "shared_pdfs").apply { mkdirs() }
+    val pdfFile = java.io.File(shareDir, history.pdfFileName()).apply {
+        if (exists()) delete()
+    }
+
+    pdfFile.outputStream().use { outputStream ->
+        writeTenantHistoryPdf(outputStream, history)
+    }
+
+    val contentUri = FileProvider.getUriForFile(
+        this,
+        "${packageName}.fileprovider",
+        pdfFile,
+    )
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/pdf"
+        setPackage(findWhatsappPackageOrNull())
+        putExtra(Intent.EXTRA_STREAM, contentUri)
+        putExtra(Intent.EXTRA_SUBJECT, "Tenant history - ${history.tenantName}")
+        putExtra(Intent.EXTRA_TEXT, "Sharing tenant history PDF for ${history.tenantName}")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    val chooserTitle = if (shareIntent.`package` == null) "Share tenant history PDF" else "Share to WhatsApp"
+    startActivity(Intent.createChooser(shareIntent, chooserTitle).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
+
+private fun Context.findWhatsappPackageOrNull(): String? {
+    val packageManager = packageManager
+    return listOf("com.whatsapp", "com.whatsapp.w4b").firstOrNull { packageName ->
+        runCatching { packageManager.getPackageInfo(packageName, 0) }.isSuccess
+    }
+}
+
+private fun Context.writeTenantHistoryPdf(
+    outputStream: java.io.OutputStream,
+    history: TenantHistoryScreenData,
+) {
+    val document = PdfDocument()
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 40f
+    val contentWidth = pageWidth - (margin * 2)
+
+    val titlePaint = Paint().apply {
+        textSize = 18f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        isAntiAlias = true
+    }
+    val sectionPaint = Paint().apply {
+        textSize = 14f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        isAntiAlias = true
+    }
+    val bodyPaint = Paint().apply {
+        textSize = 11f
+        typeface = Typeface.MONOSPACE
+        isAntiAlias = true
+    }
+    val bodyBoldPaint = Paint(bodyPaint).apply {
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+    }
+
+    var pageNumber = 1
+    var page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+    var canvas = page.canvas
+    var y = margin
+
+    fun startNewPage() {
+        document.finishPage(page)
+        pageNumber += 1
+        page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+        canvas = page.canvas
+        y = margin
+    }
+
+    fun ensureSpace(lineHeight: Float) {
+        if (y + lineHeight > pageHeight - margin) {
+            startNewPage()
+        }
+    }
+
+    fun drawWrappedText(text: String, paint: Paint, lineHeight: Float) {
+        wrapPdfText(text, paint, contentWidth).forEach { line ->
+            ensureSpace(lineHeight)
+            canvas.drawText(line, margin, y, paint)
+            y += lineHeight
+        }
+    }
+
+    fun spacer(height: Float) {
+        ensureSpace(height)
+        y += height
+    }
+
+    fun drawSection(
+        title: String,
+        header: String,
+        rows: List<String>,
+        emptyState: String,
+    ) {
+        drawWrappedText(title, sectionPaint, 20f)
+        spacer(4f)
+        drawWrappedText(header, bodyBoldPaint, 16f)
+        if (rows.isEmpty()) {
+            drawWrappedText(emptyState, bodyPaint, 16f)
+        } else {
+            rows.forEach { drawWrappedText(it, bodyPaint, 16f) }
+        }
+        spacer(10f)
+    }
+
+    drawWrappedText("Tenant History Detail", titlePaint, 24f)
+    drawWrappedText("Tenant: ${history.tenantName}", sectionPaint, 20f)
+    drawWrappedText("Generated on: ${LocalDate.now().toString().toDisplayDate()}", bodyPaint, 16f)
+    spacer(10f)
+
+    drawSection(
+        title = "Payments",
+        header = "Month      Paid On       Component      Amount",
+        rows = history.payments.map { row ->
+            "${row.billingMonthId.fitPdfColumn(10)}  " +
+                "${row.paidOn.toString().toDisplayDate().fitPdfColumn(12)}  " +
+                "${row.component.name.fitPdfColumn(13)}  " +
+                row.amountPaid.money().padStart(10)
+        },
+        emptyState = "No payments recorded.",
+    )
+
+    drawSection(
+        title = "Electricity",
+        header = "Month      Electricity",
+        rows = history.electricityCharges.map { row ->
+            "${row.billingMonthId.fitPdfColumn(10)}  ${row.amount.money().padStart(11)}"
+        },
+        emptyState = "No charges found.",
+    )
+
+    drawSection(
+        title = "Rent",
+        header = "Month      Rent",
+        rows = history.rentCharges.map { row ->
+            "${row.billingMonthId.fitPdfColumn(10)}  ${row.amount.money().padStart(11)}"
+        },
+        emptyState = "No charges found.",
+    )
+
+    if (history.adjustments.isNotEmpty()) {
+        drawSection(
+            title = "Adjustments / Initial Due",
+            header = "Month      Adjustment",
+            rows = history.adjustments.map { row ->
+                "${row.billingMonthId.fitPdfColumn(10)}  ${row.amount.money().padStart(11)}"
+            },
+            emptyState = "No adjustments found.",
+        )
+    }
+
+    drawWrappedText("Total Payment Made: ${history.totalPayments.money()}", sectionPaint, 20f)
+    drawWrappedText("Total Due: ${history.totalDue.money()}", sectionPaint, 20f)
+
+    document.finishPage(page)
+    try {
+        document.writeTo(outputStream)
+    } finally {
+        document.close()
+    }
+}
+
+private fun wrapPdfText(
+    text: String,
+    paint: Paint,
+    maxWidth: Float,
+): List<String> {
+    if (paint.measureText(text) <= maxWidth) return listOf(text)
+
+    val words = text.split(" ")
+    val lines = mutableListOf<String>()
+    var currentLine = ""
+
+    words.forEach { word ->
+        val candidate = if (currentLine.isEmpty()) word else "$currentLine $word"
+        if (paint.measureText(candidate) <= maxWidth) {
+            currentLine = candidate
+        } else {
+            if (currentLine.isNotEmpty()) {
+                lines += currentLine
+                currentLine = word
+            } else {
+                lines += word
+            }
+        }
+    }
+
+    if (currentLine.isNotEmpty()) {
+        lines += currentLine
+    }
+    return lines
+}
+
+private fun String.fitPdfColumn(width: Int): String =
+    if (length <= width) padEnd(width) else take((width - 3).coerceAtLeast(0)) + "..."
+
+private fun TenantHistoryScreenData.pdfFileName(): String {
+    val safeName = tenantName
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "_")
+        .trim('_')
+        .ifEmpty { tenantId.lowercase() }
+    return "${safeName}_tenant_history.pdf"
 }
 
 @Composable
